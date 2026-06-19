@@ -32,6 +32,41 @@ function extractLastAssistantText(messages: Array<{ role?: string; content?: unk
   return "";
 }
 
+export function buildPlanningPrompt(request: PlanRequest): string {
+  const reasonRule =
+    request.mode === "run"
+      ? [
+          "Every changes[].reason MUST start with `doc-diff:`.",
+          "Example: `doc-diff:docs/spec.md:L1-L20`.",
+          "Use the changed Markdown file path and approximate changed line range from the diff.",
+        ].join("\n")
+      : [
+          "Every changes[].reason MUST be `intent:fix`.",
+          "Fix mode MUST NOT target documentation files.",
+        ].join("\n");
+
+  return [
+    "You are DetDoc planning phase.",
+    "Inspect the repository using read-only tools only.",
+    "Do not modify files.",
+    "When ready, call submit_plan exactly once.",
+    "Do not answer with free-form text instead of submit_plan.",
+    "Plan schema constraints:",
+    "- summary: short string.",
+    "- changes: non-empty array.",
+    "- changes[].targetFiles: exact repository-relative paths that implementation may edit/create/delete.",
+    "- changes[].kind: one of create, modify, delete, rename.",
+    "- changes[].rationale: explain why the target follows from the input.",
+    `- ${reasonRule}`,
+    "Do not use free-form prose in changes[].reason; it must follow the exact prefix/value rule above.",
+    "Denied paths from config must never be targeted:",
+    JSON.stringify(request.config.paths.deny),
+    `Mode: ${request.mode}`,
+    "Input:",
+    request.input,
+  ].join("\n\n");
+}
+
 function guardExtension(request: ImplementRequest): ExtensionFactory {
   const allowed = new Set(request.approvedTargets);
   return (pi) => {
@@ -98,16 +133,7 @@ export class PiSdkRunner implements AgentRunner {
     });
 
     try {
-      const prompt = [
-        "You are DetDoc planning phase.",
-        "Inspect the repository using read-only tools.",
-        "Do not modify files.",
-        "When ready, call submit_plan exactly once.",
-        `Mode: ${request.mode}`,
-        "Input:",
-        request.input,
-      ].join("\n\n");
-      await session.prompt(prompt);
+      await session.prompt(buildPlanningPrompt(request));
       if (capturedPlan) return validateProposedPlan(capturedPlan, { config: request.config, mode: request.mode });
 
       const text = extractLastAssistantText(session.messages as Array<{ role?: string; content?: unknown }>);
