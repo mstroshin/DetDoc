@@ -49,7 +49,7 @@ export class GitRepository {
   }
 
   async statusPorcelain(): Promise<DirtyFile[]> {
-    const output = await this.git(["status", "--porcelain=v1"]);
+    const output = await this.git(["status", "--porcelain=v1", "--untracked-files=all"]);
     return output
       .split("\n")
       .filter(Boolean)

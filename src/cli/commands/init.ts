@@ -14,5 +14,8 @@ export function registerInitCommand(program: Command, io: CliIO): void {
       } else {
         writeLine(io.stdout, ".detdoc/config.yml already exists");
       }
+      if (result.docsCreated.length > 0) {
+        writeLine(io.stdout, `Created starter docs: ${result.docsCreated.join(", ")}`);
+      }
     });
 }
