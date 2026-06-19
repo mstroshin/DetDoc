@@ -32,6 +32,7 @@ export type FlowProgressPhase =
   | "repair_validation"
   | "apply_patch"
   | "post_apply_validation"
+  | "cleanup_run"
   | "cleanup_worktree"
   | "done";
 
@@ -73,6 +74,11 @@ async function runPostApplyValidation(input: { cwd: string; progress?: FlowProgr
 
 async function applyPatchToMain(repo: GitRepository, patch: string): Promise<void> {
   await repo.applyPatch(patch);
+}
+
+async function deleteRunArtifacts(input: { progress?: FlowProgressReporter }, store: ArtifactStore, runId: string): Promise<void> {
+  progress(input, { phase: "cleanup_run", message: "Removing run artifacts", runId });
+  await store.deleteRun(runId);
 }
 
 async function collectPatchForTargets(repo: GitRepository, approvedTargets: string[]): Promise<string> {
@@ -229,6 +235,7 @@ async function runFlow(input: {
     await applyPatchToMain(mainRepo, patch);
     keepWorktree = false;
     await runPostApplyValidation(input, store, manifest.runId);
+    await deleteRunArtifacts(input, store, manifest.runId);
     completed = true;
     return { runId: manifest.runId, applied: true, patch };
   } finally {
@@ -248,7 +255,7 @@ export async function runFixFlow(input: { cwd: string; message: string; agent: A
   return runFlow({ ...input, mode: "fix" });
 }
 
-export async function applyRun(input: { cwd: string; runId: string }): Promise<FlowResult> {
+export async function applyRun(input: { cwd: string; runId: string; progress?: FlowProgressReporter }): Promise<FlowResult> {
   const repo = new GitRepository(input.cwd);
   const store = new ArtifactStore(input.cwd);
   const manifest = await store.readJson<RunManifest>(input.runId, "manifest.json");
@@ -268,6 +275,7 @@ export async function applyRun(input: { cwd: string; runId: string }): Promise<F
 
   await repo.applyPatch(patch);
   await runPostApplyValidation(input, store, input.runId);
+  await deleteRunArtifacts(input, store, input.runId);
   return { runId: input.runId, applied: true, patch };
 }
 

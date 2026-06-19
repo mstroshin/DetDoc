@@ -13,6 +13,7 @@ describe("run progress reporter", () => {
     progress({ phase: "implement", message: "Agent is editing approved files" });
     progress({ phase: "repair_validation", message: "Agent is fixing validation failure (1/2)" });
     progress({ phase: "post_apply_validation", message: "Running validation commands in main worktree" });
+    progress({ phase: "cleanup_run", message: "Removing run artifacts" });
     progress({ phase: "done", message: "Run complete" });
 
     expect(io.stderrText()).toContain("◇ Collecting documentation changes");
@@ -21,6 +22,7 @@ describe("run progress reporter", () => {
     expect(io.stderrText()).toContain("◇ Agent is editing approved files");
     expect(io.stderrText()).toContain("◇ Agent is fixing validation failure (1/2)");
     expect(io.stderrText()).toContain("◇ Running validation commands in main worktree");
+    expect(io.stderrText()).toContain("◇ Removing run artifacts");
     expect(io.stderrText()).toContain("✓ Run complete");
   });
 });

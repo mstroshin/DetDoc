@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { RunManifest } from "./manifest.js";
 
@@ -30,5 +30,9 @@ export class ArtifactStore {
 
   async readJson<T>(runId: string, name: string): Promise<T> {
     return JSON.parse(await this.readText(runId, name)) as T;
+  }
+
+  async deleteRun(runId: string): Promise<void> {
+    await rm(this.runDir(runId), { recursive: true, force: true });
   }
 }

@@ -55,12 +55,14 @@ describe("DetDoc flows", () => {
       "collect_patch",
       "validate_patch",
       "apply_patch",
+      "cleanup_run",
       "cleanup_worktree",
       "done",
     ]);
     expect(result.applied).toBe(true);
     expect(await readFile(join(fixture.cwd, "src/app.ts"), "utf8")).toBe("export const value = 2;\n");
     expect(result.runId).toMatch(/-run-/);
+    await expect(access(join(fixture.cwd, ".detdoc", "runs", result.runId))).rejects.toThrow();
   });
 
   it("reports concrete files while the agent writes approved targets", async () => {
@@ -175,14 +177,17 @@ describe("DetDoc flows", () => {
       },
       writes: { "src/app.ts": "export const value = 2;\n" },
     });
-    const progress: string[] = [];
+    const events: Array<{ phase: string; runId?: string }> = [];
 
-    await expect(runDocFlow({ cwd: fixture.cwd, agent, approval: new AutoApprovalUI(false), progress: (event) => progress.push(event.phase) })).rejects.toThrow(
+    await expect(runDocFlow({ cwd: fixture.cwd, agent, approval: new AutoApprovalUI(false), progress: (event) => events.push(event) })).rejects.toThrow(
       "Plan was not approved.",
     );
 
-    expect(progress).toContain("approve_plan");
-    expect(progress).not.toContain("done");
+    expect(events.map((event) => event.phase)).toContain("approve_plan");
+    expect(events.map((event) => event.phase)).not.toContain("done");
+    const runId = events.find((event) => event.runId)?.runId;
+    expect(runId).toBeDefined();
+    await expect(access(join(fixture.cwd, ".detdoc", "runs", runId!, "manifest.json"))).resolves.toBeUndefined();
   });
 
   it("runs validation commands again after applying the patch to the main worktree", async () => {
@@ -221,8 +226,9 @@ describe("DetDoc flows", () => {
 
     expect(result.applied).toBe(true);
     expect(progress).toContain("post_apply_validation");
+    expect(progress).toContain("cleanup_run");
     expect(await readFile(join(fixture.cwd, "Generated.xcodeproj", "project.pbxproj"), "utf8")).toBe("generated");
-    expect(await readFile(join(fixture.cwd, ".detdoc", "runs", result.runId, "post-apply-validation.log"), "utf8")).toContain("Generate project artifact");
+    await expect(access(join(fixture.cwd, ".detdoc", "runs", result.runId))).rejects.toThrow();
   });
 
   it("uses validation commands added to config by the approved patch in the same run", async () => {
@@ -261,10 +267,7 @@ describe("DetDoc flows", () => {
 
     expect(result.applied).toBe(true);
     expect(await readFile(join(fixture.cwd, "GeneratedFromUpdatedConfig.xcodeproj", "project.pbxproj"), "utf8")).toBe("generated from updated config");
-    expect(await readFile(join(fixture.cwd, ".detdoc", "runs", result.runId, "validation.log"), "utf8")).toContain("Generate project from updated config");
-    expect(await readFile(join(fixture.cwd, ".detdoc", "runs", result.runId, "post-apply-validation.log"), "utf8")).toContain(
-      "Generate project from updated config",
-    );
+    await expect(access(join(fixture.cwd, ".detdoc", "runs", result.runId))).rejects.toThrow();
   });
 
   it("runs doc-diff flow that creates new approved files", async () => {
