@@ -213,7 +213,6 @@ async function gitStatus(cwd: string): Promise<string> {
 
 async function shouldCreateInitialCommit(cwd: string): Promise<boolean> {
   if (!(await isInsideGitRepository(cwd))) return false;
-  if (await hasGitHead(cwd)) return false;
   return (await gitStatus(cwd)).trim() === "";
 }
 

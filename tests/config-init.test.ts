@@ -118,6 +118,30 @@ describe("config", () => {
     expect(await readFile(join(cwd, "docs", "idea.md"), "utf8")).toContain("# Project Idea");
   });
 
+  it("creates a DetDoc setup commit in an existing clean git repository", async () => {
+    const cwd = await tempDir();
+    await git(cwd, ["init", "-b", "main"]);
+    await git(cwd, ["config", "user.name", "DetDoc Test"]);
+    await git(cwd, ["config", "user.email", "detdoc@example.com"]);
+    await writeFile(join(cwd, "existing.txt"), "already committed\n", "utf8");
+    await git(cwd, ["add", "existing.txt"]);
+    await git(cwd, ["commit", "-m", "Existing project"]);
+
+    const result = await initConfig(cwd);
+
+    expect(result.initialCommitCreated).toBe(true);
+    expect((await git(cwd, ["log", "--oneline", "-1"]))).toContain("Initial DetDoc setup");
+    const committedFiles = await git(cwd, ["show", "--name-only", "--format=", "HEAD"]);
+    expect(committedFiles).toContain(".gitignore");
+    expect(committedFiles).toContain(".detdoc/config.yml");
+    expect(committedFiles).toContain(".detdoc/runs/.gitkeep");
+    expect(committedFiles).not.toContain("docs/idea.md");
+
+    const status = await git(cwd, ["status", "--short", "--untracked-files=all"]);
+    expect(status).toContain("?? docs/idea.md");
+    expect(status).toContain("?? docs/technical-spec.md");
+  });
+
   it("does not create an initial commit when an empty git repository already has user changes", async () => {
     const cwd = await tempDir();
     await git(cwd, ["init", "-b", "main"]);
