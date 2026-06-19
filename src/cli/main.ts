@@ -1,8 +1,10 @@
 import { Command, CommanderError } from "commander";
+import { registerApplyCommand } from "./commands/apply.js";
 import { registerDiffCommand } from "./commands/diff.js";
 import { registerFixCommand } from "./commands/fix.js";
 import { registerInitCommand } from "./commands/init.js";
 import { registerPlanCommand } from "./commands/plan.js";
+import { registerReplayCommand } from "./commands/replay.js";
 import { registerRunCommand } from "./commands/run.js";
 import { defaultIO, type CliIO, writeLine } from "./output.js";
 import { toErrorMessage } from "../core/errors.js";
@@ -37,8 +39,8 @@ export async function runCli(argv: string[], io: CliIO = defaultIO()): Promise<n
   registerPlanCommand(program, io);
   registerRunCommand(program, io);
   registerFixCommand(program, io);
-  addCommand(program, "apply", "Apply a saved DetDoc patch");
-  addCommand(program, "replay", "Replay a saved DetDoc patch without calling an agent");
+  registerApplyCommand(program, io);
+  registerReplayCommand(program, io);
 
   try {
     await program.parseAsync(argv);

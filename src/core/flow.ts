@@ -150,3 +150,54 @@ export async function runDocFlow(input: { cwd: string; agent: AgentRunner; appro
 export async function runFixFlow(input: { cwd: string; message: string; agent: AgentRunner; approval: ApprovalUI }): Promise<FlowResult> {
   return runFlow({ ...input, mode: "fix" });
 }
+
+export async function applyRun(input: { cwd: string; runId: string; approval: ApprovalUI }): Promise<FlowResult> {
+  const repo = new GitRepository(input.cwd);
+  const store = new ArtifactStore(input.cwd);
+  const manifest = await store.readJson<RunManifest>(input.runId, "manifest.json");
+  const patch = await store.readText(input.runId, "changes.patch");
+
+  const head = await repo.headCommit();
+  if (head !== manifest.baseCommit) {
+    throw new DetDocError(`Cannot apply ${input.runId}: current HEAD ${head} does not match base ${manifest.baseCommit}.`, "APPLY_BASE_MISMATCH");
+  }
+
+  for (const file of manifest.touchedFiles) {
+    const current = await repo.fileSha256(file.path);
+    if (current !== file.before) {
+      throw new DetDocError(`Cannot apply ${input.runId}: preimage hash mismatch for ${file.path}.`, "APPLY_PREIMAGE_MISMATCH");
+    }
+  }
+
+  if (!(await input.approval.approvePatch(patch))) {
+    return { runId: input.runId, applied: false, patch };
+  }
+
+  await repo.applyPatch(patch);
+  return { runId: input.runId, applied: true, patch };
+}
+
+export async function replayRun(input: { cwd: string; runId: string }): Promise<FlowResult> {
+  const repo = new GitRepository(input.cwd);
+  const store = new ArtifactStore(input.cwd);
+  const manifest = await store.readJson<RunManifest>(input.runId, "manifest.json");
+  const patch = await store.readText(input.runId, "changes.patch");
+  const config = await loadConfig(input.cwd);
+
+  const head = await repo.headCommit();
+  if (head !== manifest.baseCommit) {
+    throw new DetDocError(`Cannot replay ${input.runId}: current HEAD ${head} does not match base ${manifest.baseCommit}.`, "REPLAY_BASE_MISMATCH");
+  }
+
+  for (const file of manifest.touchedFiles) {
+    const current = await repo.fileSha256(file.path);
+    if (current !== file.before) {
+      throw new DetDocError(`Cannot replay ${input.runId}: preimage hash mismatch for ${file.path}.`, "REPLAY_PREIMAGE_MISMATCH");
+    }
+  }
+
+  await repo.applyPatch(patch);
+  const validationLog = await runValidationCommands({ cwd: input.cwd, config });
+  await store.writeText(input.runId, "replay.log", validationLog);
+  return { runId: input.runId, applied: true, patch };
+}
