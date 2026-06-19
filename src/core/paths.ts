@@ -21,8 +21,12 @@ export function isDeniedPath(path: string, config: DetDocConfig): boolean {
   return matches(normalizePath(path), config.paths.deny);
 }
 
+function isDetDocInternalPath(path: string): boolean {
+  return normalizePath(path).startsWith(".detdoc/");
+}
+
 function nonDocDirty(files: DirtyFile[], config: DetDocConfig): DirtyFile[] {
-  return files.filter((file) => !isDocPath(file.path, config));
+  return files.filter((file) => !isDetDocInternalPath(file.path) && !isDocPath(file.path, config));
 }
 
 export async function assertRunDirtyPolicy(repo: GitRepository, config: DetDocConfig): Promise<DirtyFile[]> {

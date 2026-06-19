@@ -1,4 +1,5 @@
 import { Command, CommanderError } from "commander";
+import { registerDiffCommand } from "./commands/diff.js";
 import { registerInitCommand } from "./commands/init.js";
 import { defaultIO, type CliIO, writeLine } from "./output.js";
 import { toErrorMessage } from "../core/errors.js";
@@ -29,7 +30,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO()): Promise<n
     });
 
   registerInitCommand(program, io);
-  addCommand(program, "diff", "Print normalized documentation diff");
+  registerDiffCommand(program, io);
   addCommand(program, "plan", "Create an approved implementation plan without applying code changes");
   addCommand(program, "run", "Run the documentation-diff workflow");
   addCommand(program, "fix", "Run the bugfix-intent workflow");
