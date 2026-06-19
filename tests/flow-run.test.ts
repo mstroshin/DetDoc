@@ -54,7 +54,7 @@ describe("DetDoc flows", () => {
       "implement",
       "collect_patch",
       "validate_patch",
-      "apply_patch",
+      "merge_worktree",
       "cleanup_run",
       "cleanup_worktree",
       "done",
@@ -154,6 +154,42 @@ describe("DetDoc flows", () => {
     expect(agent.repairAttempts).toBe(1);
     expect(progress).toContain("repair_validation");
     expect(await readFile(join(fixture.cwd, "src/app.ts"), "utf8")).toBe("export const value = 2;\n");
+  });
+
+  it("merges only approved worktree changes into main", async () => {
+    const fixture = await createGitFixture({ "docs/spec.md": "old\n", "src/app.ts": "export const value = 1;\n" });
+    await initConfig(fixture.cwd);
+    await writeFile(join(fixture.cwd, "docs/spec.md"), "new behavior\n", "utf8");
+
+    const agent: AgentRunner = {
+      async plan(_request: PlanRequest) {
+        return {
+          summary: "Update app value",
+          changes: [
+            {
+              reason: "doc-diff:docs/spec.md:L1-L1",
+              targetFiles: ["src/app.ts"],
+              kind: "modify" as const,
+              rationale: "Only src/app.ts is approved.",
+            },
+          ],
+          questions: [],
+          risk: "low" as const,
+        };
+      },
+      async implement(request: ImplementRequest): Promise<void> {
+        await writeFile(join(request.cwd, "src/app.ts"), "export const value = 2;\n", "utf8");
+        await writeFile(join(request.cwd, "unapproved.txt"), "must not merge\n", "utf8");
+      },
+    };
+    const progress: string[] = [];
+
+    const result = await runDocFlow({ cwd: fixture.cwd, agent, approval: new AutoApprovalUI(true), progress: (event) => progress.push(event.phase) });
+
+    expect(result.applied).toBe(true);
+    expect(progress).toContain("merge_worktree");
+    expect(await readFile(join(fixture.cwd, "src/app.ts"), "utf8")).toBe("export const value = 2;\n");
+    await expect(access(join(fixture.cwd, "unapproved.txt"))).rejects.toThrow();
   });
 
   it("does not report done when plan approval is rejected", async () => {

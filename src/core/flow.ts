@@ -30,6 +30,7 @@ export type FlowProgressPhase =
   | "collect_patch"
   | "validate_patch"
   | "repair_validation"
+  | "merge_worktree"
   | "apply_patch"
   | "post_apply_validation"
   | "cleanup_run"
@@ -70,6 +71,11 @@ async function runPostApplyValidation(input: { cwd: string; progress?: FlowProgr
   progress(input, { phase: "post_apply_validation", message: "Running validation commands in main worktree", runId });
   const validationLog = await runValidationCommands({ cwd: input.cwd, config: appliedConfig });
   await store.writeText(runId, "post-apply-validation.log", validationLog);
+}
+
+async function mergeValidatedWorktreePatch(input: { progress?: FlowProgressReporter }, repo: GitRepository, patch: string, runId: string): Promise<void> {
+  progress(input, { phase: "merge_worktree", message: "Merging validated worktree changes into main", runId });
+  await repo.applyPatch(patch);
 }
 
 async function applyPatchToMain(repo: GitRepository, patch: string): Promise<void> {
@@ -231,8 +237,7 @@ async function runFlow(input: {
     await store.writeText(manifest.runId, "validation.log", validationLog);
     await updateManifest(store, manifest);
 
-    progress(input, { phase: "apply_patch", message: "Applying validated patch", runId: manifest.runId });
-    await applyPatchToMain(mainRepo, patch);
+    await mergeValidatedWorktreePatch(input, mainRepo, patch, manifest.runId);
     keepWorktree = false;
     await runPostApplyValidation(input, store, manifest.runId);
     await deleteRunArtifacts(input, store, manifest.runId);
