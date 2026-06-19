@@ -1,4 +1,5 @@
 import { Command, CommanderError } from "commander";
+import { registerInitCommand } from "./commands/init.js";
 import { defaultIO, type CliIO, writeLine } from "./output.js";
 import { toErrorMessage } from "../core/errors.js";
 
@@ -27,7 +28,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO()): Promise<n
       writeErr: (text) => io.stderr.write(text),
     });
 
-  addCommand(program, "init", "Create .detdoc/config.yml");
+  registerInitCommand(program, io);
   addCommand(program, "diff", "Print normalized documentation diff");
   addCommand(program, "plan", "Create an approved implementation plan without applying code changes");
   addCommand(program, "run", "Run the documentation-diff workflow");
