@@ -26,7 +26,13 @@ export interface ImplementRequest {
   progress?: AgentImplementationProgressReporter;
 }
 
+export interface RepairValidationRequest extends ImplementRequest {
+  validationLog: string;
+  attempt: number;
+}
+
 export interface AgentRunner {
   plan(request: PlanRequest): Promise<ProposedPlan>;
   implement(request: ImplementRequest): Promise<void>;
+  repairValidation?(request: RepairValidationRequest): Promise<void>;
 }

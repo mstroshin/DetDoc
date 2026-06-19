@@ -46,6 +46,27 @@ describe("plan validation", () => {
     ).toThrow("denied path");
   });
 
+  it("rejects documentation targets for run mode", () => {
+    expect(() =>
+      validateProposedPlan(
+        {
+          summary: "Bad run plan",
+          changes: [
+            {
+              reason: "doc-diff:docs/spec.md:L1-L1",
+              targetFiles: ["docs/spec.md"],
+              kind: "modify",
+              rationale: "Implementation must not rewrite source documentation.",
+            },
+          ],
+          questions: [],
+          risk: "low",
+        },
+        { config: defaultConfig(), mode: "run" },
+      ),
+    ).toThrow("plans must not target documentation files");
+  });
+
   it("rejects doc targets for fix mode", () => {
     expect(() =>
       validateProposedPlan(
@@ -64,7 +85,7 @@ describe("plan validation", () => {
         },
         { config: defaultConfig(), mode: "fix" },
       ),
-    ).toThrow("fix plans must not target documentation files");
+    ).toThrow("plans must not target documentation files");
   });
 });
 

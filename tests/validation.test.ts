@@ -37,6 +37,17 @@ describe("patch validation", () => {
     ).rejects.toThrow("unapproved path");
   });
 
+  it("rejects documentation file changes in run mode", async () => {
+    const fixture = await createGitFixture({ "docs/spec.md": "old\n" });
+    await writeFile(join(fixture.cwd, "docs/spec.md"), "new\n", "utf8");
+    const repo = new GitRepository(fixture.cwd);
+    const patch = await collectPatch(repo);
+
+    await expect(
+      validatePatch({ patch, repo, config: defaultConfig(), mode: "run", approvedTargets: ["docs/spec.md"] }),
+    ).rejects.toThrow("patches must not modify documentation files");
+  });
+
   it("rejects doc changes in fix mode", async () => {
     const fixture = await createGitFixture({ "docs/spec.md": "old\n" });
     await writeFile(join(fixture.cwd, "docs/spec.md"), "new\n", "utf8");
@@ -45,7 +56,7 @@ describe("patch validation", () => {
 
     await expect(
       validatePatch({ patch, repo, config: defaultConfig(), mode: "fix", approvedTargets: ["docs/spec.md"] }),
-    ).rejects.toThrow("fix patches must not modify documentation files");
+    ).rejects.toThrow("patches must not modify documentation files");
   });
 });
 

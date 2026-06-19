@@ -29,6 +29,7 @@ export type FlowProgressPhase =
   | "implement"
   | "collect_patch"
   | "validate_patch"
+  | "repair_validation"
   | "apply_patch"
   | "post_apply_validation"
   | "cleanup_worktree"
@@ -49,6 +50,8 @@ function progress(input: { progress?: FlowProgressReporter }, event: FlowProgres
 function agentActionMessage(action: "edit" | "write", path: string): string {
   return `Agent is ${action === "write" ? "writing" : "editing"} ${path}`;
 }
+
+const maxValidationRepairAttempts = 2;
 
 async function updateManifest(store: ArtifactStore, manifest: RunManifest): Promise<void> {
   await store.writeJson(manifest.runId, "manifest.json", manifest);
@@ -170,13 +173,41 @@ async function runFlow(input: {
       progress: (event) => progress(input, { phase: "implement", message: agentActionMessage(event.action, event.path), runId: manifest.runId }),
     });
 
-    progress(input, { phase: "collect_patch", message: "Collecting generated patch", runId: manifest.runId });
-    const patch = await collectPatchForTargets(worktree.repo, approvedTargets);
-    progress(input, { phase: "validate_patch", message: "Validating generated patch", runId: manifest.runId });
-    const validation = await validatePatch({ patch, repo: worktree.repo, config, mode: input.mode, approvedTargets });
-    const worktreeConfig = await loadConfig(worktree.path);
-    const validationLog = await runValidationCommands({ cwd: worktree.path, config: worktreeConfig });
+    let patch = "";
+    let validation: Awaited<ReturnType<typeof validatePatch>> | undefined;
+    let validationLog = "";
+    for (let repairAttempt = 0; ; repairAttempt++) {
+      progress(input, { phase: "collect_patch", message: "Collecting generated patch", runId: manifest.runId });
+      patch = await collectPatchForTargets(worktree.repo, approvedTargets);
+      progress(input, { phase: "validate_patch", message: "Validating generated patch", runId: manifest.runId });
+      validation = await validatePatch({ patch, repo: worktree.repo, config, mode: input.mode, approvedTargets });
+      const worktreeConfig = await loadConfig(worktree.path);
+      try {
+        validationLog = await runValidationCommands({ cwd: worktree.path, config: worktreeConfig });
+        break;
+      } catch (error) {
+        const repairValidation = input.agent.repairValidation;
+        const canRepair = error instanceof DetDocError && error.code === "VALIDATION_FAILED" && repairValidation && repairAttempt < maxValidationRepairAttempts;
+        if (!canRepair) throw error;
+        const attempt = repairAttempt + 1;
+        const validationFailureLog = error.message;
+        await store.writeText(manifest.runId, `validation-failure-${attempt}.log`, validationFailureLog);
+        progress(input, { phase: "repair_validation", message: `Agent is fixing validation failure (${attempt}/${maxValidationRepairAttempts})`, runId: manifest.runId });
+        await repairValidation.call(input.agent, {
+          mode: input.mode,
+          input: taskInput,
+          config: worktreeConfig,
+          cwd: worktree.path,
+          approvedPlan: proposedPlan,
+          approvedTargets,
+          validationLog: validationFailureLog,
+          attempt,
+          progress: (event) => progress(input, { phase: "repair_validation", message: agentActionMessage(event.action, event.path), runId: manifest.runId }),
+        });
+      }
+    }
 
+    if (!validation) throw new DetDocError("Validation did not produce a result.", "VALIDATION_INTERNAL_ERROR");
     manifest.touchedFiles = await Promise.all(
       validation.changedFiles.map(async (path) => ({
         path,

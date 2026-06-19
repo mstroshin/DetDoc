@@ -1,3 +1,4 @@
+import { isAbsolute, relative, resolve } from "node:path";
 import {
   AuthStorage,
   createAgentSession,
@@ -10,8 +11,9 @@ import {
   type ExtensionFactory,
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import type { AgentRunner, ImplementRequest, PlanRequest } from "./agent-runner.js";
-import { isDeniedPath } from "../paths.js";
+import type { AgentRunner, ImplementRequest, PlanRequest, RepairValidationRequest } from "./agent-runner.js";
+import type { DetDocConfig } from "../config.js";
+import { isDeniedPath, isDocPath } from "../paths.js";
 import { PlanSchema, type ProposedPlan, validateProposedPlan } from "../plan.js";
 
 function extractLastAssistantText(messages: Array<{ role?: string; content?: unknown }>): string {
@@ -60,6 +62,7 @@ export function buildPlanningPrompt(request: PlanRequest): string {
     `- ${reasonRule}`,
     "Do not use free-form prose in changes[].reason; it must follow the exact prefix/value rule above.",
     "If the documentation names validation or generation commands that DetDoc should run after applying changes, inspect `.detdoc/config.yml`; if those commands are missing, include `.detdoc/config.yml` in targetFiles and update validation.commands. Prefer validation.commands entries shaped as `{ name, run }`.",
+    "Do not target documentation files such as `docs/**`; documentation is read-only input for implementation.",
     "Denied paths from config must never be targeted:",
     JSON.stringify(request.config.paths.deny),
     `Mode: ${request.mode}`,
@@ -68,20 +71,56 @@ export function buildPlanningPrompt(request: PlanRequest): string {
   ].join("\n\n");
 }
 
+type AgentToolName = "read" | "grep" | "find" | "ls" | "edit" | "write" | string;
+
+function isWriteTool(toolName: AgentToolName): toolName is "edit" | "write" {
+  return toolName === "edit" || toolName === "write";
+}
+
+function toolInputPath(input: unknown): string | undefined {
+  if (!input || typeof input !== "object") return undefined;
+  const path = (input as { path?: unknown }).path;
+  return typeof path === "string" && path.length > 0 ? path.replace(/^@/, "") : undefined;
+}
+
+function projectRelativePath(cwd: string, rawPath: string): { inside: boolean; path: string } {
+  const absolute = isAbsolute(rawPath) ? resolve(rawPath) : resolve(cwd, rawPath);
+  const relativePath = relative(cwd, absolute).replaceAll("\\", "/");
+  const inside = relativePath === "" || (!relativePath.startsWith("../") && relativePath !== ".." && !isAbsolute(relativePath));
+  return { inside, path: relativePath };
+}
+
+export function validateAgentToolPath(input: {
+  cwd: string;
+  toolName: AgentToolName;
+  rawPath?: string;
+  approvedTargets: string[];
+  config: DetDocConfig;
+}): { allowed: true; path?: string } | { allowed: false; reason: string; path?: string } {
+  if (!input.rawPath) return { allowed: true };
+  const normalized = projectRelativePath(input.cwd, input.rawPath);
+  if (!normalized.inside) {
+    return { allowed: false, reason: `DetDoc blocked path outside project root: ${input.rawPath}`, path: normalized.path };
+  }
+  if (isDeniedPath(normalized.path, input.config)) {
+    return { allowed: false, reason: `DetDoc blocked denied path: ${normalized.path}`, path: normalized.path };
+  }
+  if (isWriteTool(input.toolName) && isDocPath(normalized.path, input.config)) {
+    return { allowed: false, reason: `DetDoc blocked write to ${normalized.path}: documentation files are read-only`, path: normalized.path };
+  }
+  if (isWriteTool(input.toolName) && !input.approvedTargets.includes(normalized.path)) {
+    return { allowed: false, reason: `DetDoc blocked unapproved path: ${normalized.path}`, path: normalized.path };
+  }
+  return { allowed: true, path: normalized.path };
+}
+
 function guardExtension(request: ImplementRequest): ExtensionFactory {
-  const allowed = new Set(request.approvedTargets);
   return (pi) => {
     pi.on("tool_call", async (event) => {
-      if (event.toolName !== "edit" && event.toolName !== "write") return undefined;
-      const input = event.input as { path?: unknown };
-      const rawPath = typeof input.path === "string" ? input.path.replace(/^@/, "") : "";
-      if (isDeniedPath(rawPath, request.config)) {
-        return { block: true, reason: `DetDoc blocked denied path: ${rawPath}` };
-      }
-      if (!allowed.has(rawPath)) {
-        return { block: true, reason: `DetDoc blocked unapproved path: ${rawPath}` };
-      }
-      request.progress?.({ action: event.toolName, path: rawPath });
+      const rawPath = toolInputPath(event.input);
+      const result = validateAgentToolPath({ cwd: request.cwd, toolName: event.toolName, rawPath, approvedTargets: request.approvedTargets, config: request.config });
+      if (!result.allowed) return { block: true, reason: result.reason };
+      if (isWriteTool(event.toolName) && result.path) request.progress?.({ action: event.toolName, path: result.path });
       return undefined;
     });
   };
@@ -145,7 +184,7 @@ export class PiSdkRunner implements AgentRunner {
     }
   }
 
-  async implement(request: ImplementRequest): Promise<void> {
+  private async runImplementationPrompt(request: ImplementRequest, prompt: string): Promise<void> {
     const loader = new DefaultResourceLoader({
       cwd: request.cwd,
       agentDir: getAgentDir(),
@@ -167,21 +206,44 @@ export class PiSdkRunner implements AgentRunner {
     });
 
     try {
-      const prompt = [
-        "You are DetDoc implementation phase.",
-        "Implement only the approved plan.",
-        "Use edit/write only for approved target paths.",
-        "If another file is required, stop and explain instead of editing it.",
-        `Mode: ${request.mode}`,
-        "Approved plan:",
-        JSON.stringify(request.approvedPlan, null, 2),
-        "Original input:",
-        request.input,
-      ].join("\n\n");
       await session.prompt(prompt);
     } finally {
       session.dispose();
     }
+  }
+
+  async implement(request: ImplementRequest): Promise<void> {
+    const prompt = [
+      "You are DetDoc implementation phase.",
+      "Implement only the approved plan.",
+      "Use edit/write only for approved target paths.",
+      "Documentation files are read-only; never edit files under docs/.",
+      "If another file is required, stop and explain instead of editing it.",
+      `Mode: ${request.mode}`,
+      "Approved plan:",
+      JSON.stringify(request.approvedPlan, null, 2),
+      "Original input:",
+      request.input,
+    ].join("\n\n");
+    await this.runImplementationPrompt(request, prompt);
+  }
+
+  async repairValidation(request: RepairValidationRequest): Promise<void> {
+    const prompt = [
+      "You are DetDoc validation repair phase.",
+      `Validation failed on attempt ${request.attempt}.`,
+      "Fix the failure by editing only approved target paths.",
+      "Do not edit documentation files under docs/.",
+      "Do not broaden scope or add unapproved files.",
+      `Mode: ${request.mode}`,
+      "Approved plan:",
+      JSON.stringify(request.approvedPlan, null, 2),
+      "Validation log:",
+      request.validationLog,
+      "Original input:",
+      request.input,
+    ].join("\n\n");
+    await this.runImplementationPrompt(request, prompt);
   }
 }
 

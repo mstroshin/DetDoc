@@ -5,6 +5,7 @@ import YAML from "yaml";
 import { AutoApprovalUI, type ApprovalUI } from "../src/core/approval.js";
 import { defaultConfig, initConfig } from "../src/core/config.js";
 import { FakeAgentRunner } from "../src/core/agent/fake-agent-runner.js";
+import type { AgentRunner, ImplementRequest, PlanRequest } from "../src/core/agent/agent-runner.js";
 import { runDocFlow, runFixFlow } from "../src/core/flow.js";
 import { cleanupFixtures, createGitFixture } from "./helpers/git-fixture.js";
 
@@ -95,6 +96,62 @@ describe("DetDoc flows", () => {
     });
 
     expect(implementMessages).toContain("Agent is writing src/app.ts");
+  });
+
+  it("asks the agent to repair approved files when validation fails", async () => {
+    const fixture = await createGitFixture({ "docs/spec.md": "old\n", "src/app.ts": "export const value = 1;\n" });
+    await initConfig(fixture.cwd);
+    const config = defaultConfig();
+    config.validation.commands = [
+      {
+        name: "Check generated value",
+        run: "node -e \"const fs=require('fs'); if(!fs.readFileSync('src/app.ts','utf8').includes('value = 2')) process.exit(1)\"",
+      },
+    ];
+    await writeFile(join(fixture.cwd, ".detdoc", "config.yml"), YAML.stringify(config), "utf8");
+    await fixture.git(["add", ".detdoc/config.yml"]);
+    await fixture.git(["commit", "-m", "Configure validation"]);
+    await writeFile(join(fixture.cwd, "docs/spec.md"), "new behavior\n", "utf8");
+
+    class RepairingAgent implements AgentRunner {
+      repairAttempts = 0;
+
+      async plan(_request: PlanRequest) {
+        return {
+          summary: "Update app value",
+          changes: [
+            {
+              reason: "doc-diff:docs/spec.md:L1-L1",
+              targetFiles: ["src/app.ts"],
+              kind: "modify" as const,
+              rationale: "The changed documentation requires value 2.",
+            },
+          ],
+          questions: [],
+          risk: "low" as const,
+        };
+      }
+
+      async implement(request: ImplementRequest): Promise<void> {
+        await writeFile(join(request.cwd, "src/app.ts"), "export const value = 999;\n", "utf8");
+      }
+
+      async repairValidation(request: ImplementRequest & { validationLog: string; attempt: number }): Promise<void> {
+        this.repairAttempts += 1;
+        expect(request.validationLog).toContain("Validation command failed: Check generated value");
+        expect(request.attempt).toBe(1);
+        await writeFile(join(request.cwd, "src/app.ts"), "export const value = 2;\n", "utf8");
+      }
+    }
+    const agent = new RepairingAgent();
+    const progress: string[] = [];
+
+    const result = await runDocFlow({ cwd: fixture.cwd, agent, approval: new AutoApprovalUI(true), progress: (event) => progress.push(event.phase) });
+
+    expect(result.applied).toBe(true);
+    expect(agent.repairAttempts).toBe(1);
+    expect(progress).toContain("repair_validation");
+    expect(await readFile(join(fixture.cwd, "src/app.ts"), "utf8")).toBe("export const value = 2;\n");
   });
 
   it("does not report done when plan approval is rejected", async () => {

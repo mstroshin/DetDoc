@@ -37,8 +37,8 @@ export async function validatePatch(input: {
     if (!approved.has(file)) {
       throw new DetDocError(`Patch touches unapproved path: ${file}`, "PATCH_UNAPPROVED_PATH");
     }
-    if (input.mode === "fix" && isDocPath(file, input.config)) {
-      throw new DetDocError(`fix patches must not modify documentation files: ${file}`, "FIX_PATCH_DOC_CHANGE");
+    if (isDocPath(file, input.config)) {
+      throw new DetDocError(`patches must not modify documentation files: ${file}`, "PATCH_DOC_CHANGE");
     }
     if (file.startsWith(".detdoc/runs/")) {
       throw new DetDocError(`Patch must not include run artifacts: ${file}`, "PATCH_ARTIFACT_CHANGE");

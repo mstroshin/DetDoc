@@ -36,8 +36,8 @@ export function validateProposedPlan(
       if (isDeniedPath(target, options.config)) {
         throw new Error(`plan targets denied path: ${target}`);
       }
-      if (options.mode === "fix" && isDocPath(target, options.config)) {
-        throw new Error(`fix plans must not target documentation files: ${target}`);
+      if (isDocPath(target, options.config)) {
+        throw new Error(`plans must not target documentation files: ${target}`);
       }
     }
   }
