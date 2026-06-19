@@ -9,10 +9,15 @@ export interface PlanRequest {
   cwd: string;
 }
 
-export interface AgentImplementationProgressEvent {
-  action: "edit" | "write";
-  path: string;
-}
+export type AgentImplementationProgressEvent =
+  | {
+      action: "edit" | "write";
+      path: string;
+    }
+  | {
+      action: "bash";
+      command: string;
+    };
 
 export type AgentImplementationProgressReporter = (event: AgentImplementationProgressEvent) => void;
 

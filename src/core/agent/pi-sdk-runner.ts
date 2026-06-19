@@ -71,7 +71,9 @@ export function buildPlanningPrompt(request: PlanRequest): string {
   ].join("\n\n");
 }
 
-type AgentToolName = "read" | "grep" | "find" | "ls" | "edit" | "write" | string;
+export const implementationToolNames = ["read", "grep", "find", "ls", "bash", "edit", "write"] as const;
+
+type AgentToolName = "read" | "grep" | "find" | "ls" | "bash" | "edit" | "write" | string;
 
 function isWriteTool(toolName: AgentToolName): toolName is "edit" | "write" {
   return toolName === "edit" || toolName === "write";
@@ -81,6 +83,12 @@ function toolInputPath(input: unknown): string | undefined {
   if (!input || typeof input !== "object") return undefined;
   const path = (input as { path?: unknown }).path;
   return typeof path === "string" && path.length > 0 ? path.replace(/^@/, "") : undefined;
+}
+
+function toolInputCommand(input: unknown): string | undefined {
+  if (!input || typeof input !== "object") return undefined;
+  const command = (input as { command?: unknown }).command;
+  return typeof command === "string" && command.length > 0 ? command : undefined;
 }
 
 function projectRelativePath(cwd: string, rawPath: string): { inside: boolean; path: string } {
@@ -114,12 +122,50 @@ export function validateAgentToolPath(input: {
   return { allowed: true, path: normalized.path };
 }
 
+export function buildImplementationPrompt(request: ImplementRequest): string {
+  return [
+    "You are DetDoc implementation phase.",
+    "Implement only the approved plan.",
+    "Use bash for diagnostics, generation, builds, and tests inside the isolated worktree.",
+    "Use edit/write only for approved target paths.",
+    "Documentation files are read-only; never edit files under docs/.",
+    "If another source file is required, stop and explain instead of editing it.",
+    `Mode: ${request.mode}`,
+    "Approved plan:",
+    JSON.stringify(request.approvedPlan, null, 2),
+    "Original input:",
+    request.input,
+  ].join("\n\n");
+}
+
+export function buildValidationRepairPrompt(request: RepairValidationRequest): string {
+  return [
+    "You are DetDoc validation repair phase.",
+    `Validation failed on attempt ${request.attempt}.`,
+    "Use bash to inspect and reproduce the validation failure inside the isolated worktree.",
+    "Fix the failure by editing only approved target paths.",
+    "Do not edit documentation files under docs/.",
+    "Do not broaden scope or add unapproved files.",
+    `Mode: ${request.mode}`,
+    "Approved plan:",
+    JSON.stringify(request.approvedPlan, null, 2),
+    "Validation log:",
+    request.validationLog,
+    "Original input:",
+    request.input,
+  ].join("\n\n");
+}
+
 function guardExtension(request: ImplementRequest): ExtensionFactory {
   return (pi) => {
     pi.on("tool_call", async (event) => {
       const rawPath = toolInputPath(event.input);
       const result = validateAgentToolPath({ cwd: request.cwd, toolName: event.toolName, rawPath, approvedTargets: request.approvedTargets, config: request.config });
       if (!result.allowed) return { block: true, reason: result.reason };
+      if (event.toolName === "bash") {
+        const command = toolInputCommand(event.input);
+        if (command) request.progress?.({ action: "bash", command });
+      }
       if (isWriteTool(event.toolName) && result.path) request.progress?.({ action: event.toolName, path: result.path });
       return undefined;
     });
@@ -201,7 +247,7 @@ export class PiSdkRunner implements AgentRunner {
       settingsManager,
       resourceLoader: loader,
       sessionManager: SessionManager.inMemory(request.cwd),
-      tools: ["read", "grep", "find", "ls", "edit", "write"],
+      tools: [...implementationToolNames],
       thinkingLevel: request.config.agent.thinking,
     });
 
@@ -213,37 +259,11 @@ export class PiSdkRunner implements AgentRunner {
   }
 
   async implement(request: ImplementRequest): Promise<void> {
-    const prompt = [
-      "You are DetDoc implementation phase.",
-      "Implement only the approved plan.",
-      "Use edit/write only for approved target paths.",
-      "Documentation files are read-only; never edit files under docs/.",
-      "If another file is required, stop and explain instead of editing it.",
-      `Mode: ${request.mode}`,
-      "Approved plan:",
-      JSON.stringify(request.approvedPlan, null, 2),
-      "Original input:",
-      request.input,
-    ].join("\n\n");
-    await this.runImplementationPrompt(request, prompt);
+    await this.runImplementationPrompt(request, buildImplementationPrompt(request));
   }
 
   async repairValidation(request: RepairValidationRequest): Promise<void> {
-    const prompt = [
-      "You are DetDoc validation repair phase.",
-      `Validation failed on attempt ${request.attempt}.`,
-      "Fix the failure by editing only approved target paths.",
-      "Do not edit documentation files under docs/.",
-      "Do not broaden scope or add unapproved files.",
-      `Mode: ${request.mode}`,
-      "Approved plan:",
-      JSON.stringify(request.approvedPlan, null, 2),
-      "Validation log:",
-      request.validationLog,
-      "Original input:",
-      request.input,
-    ].join("\n\n");
-    await this.runImplementationPrompt(request, prompt);
+    await this.runImplementationPrompt(request, buildValidationRepairPrompt(request));
   }
 }
 

@@ -1,5 +1,5 @@
 import YAML from "yaml";
-import type { AgentRunner } from "./agent/agent-runner.js";
+import type { AgentImplementationProgressEvent, AgentRunner } from "./agent/agent-runner.js";
 import type { ApprovalUI } from "./approval.js";
 import { ArtifactStore } from "./artifacts.js";
 import { loadConfig } from "./config.js";
@@ -47,8 +47,14 @@ function progress(input: { progress?: FlowProgressReporter }, event: FlowProgres
   input.progress?.(event);
 }
 
-function agentActionMessage(action: "edit" | "write", path: string): string {
-  return `Agent is ${action === "write" ? "writing" : "editing"} ${path}`;
+function shortenCommand(command: string): string {
+  const singleLine = command.replace(/\s+/g, " ").trim();
+  return singleLine.length > 120 ? `${singleLine.slice(0, 117)}...` : singleLine;
+}
+
+function agentActionMessage(event: AgentImplementationProgressEvent): string {
+  if (event.action === "bash") return `Agent is running ${shortenCommand(event.command)}`;
+  return `Agent is ${event.action === "write" ? "writing" : "editing"} ${event.path}`;
 }
 
 const maxValidationRepairAttempts = 2;
@@ -170,7 +176,7 @@ async function runFlow(input: {
       cwd: worktree.path,
       approvedPlan: proposedPlan,
       approvedTargets,
-      progress: (event) => progress(input, { phase: "implement", message: agentActionMessage(event.action, event.path), runId: manifest.runId }),
+      progress: (event) => progress(input, { phase: "implement", message: agentActionMessage(event), runId: manifest.runId }),
     });
 
     let patch = "";
@@ -202,7 +208,7 @@ async function runFlow(input: {
           approvedTargets,
           validationLog: validationFailureLog,
           attempt,
-          progress: (event) => progress(input, { phase: "repair_validation", message: agentActionMessage(event.action, event.path), runId: manifest.runId }),
+          progress: (event) => progress(input, { phase: "repair_validation", message: agentActionMessage(event), runId: manifest.runId }),
         });
       }
     }
