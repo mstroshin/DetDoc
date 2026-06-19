@@ -4,7 +4,7 @@ import { writeLine } from "../output.js";
 import type { AgentRunner } from "../../core/agent/agent-runner.js";
 import { FakeAgentRunner } from "../../core/agent/fake-agent-runner.js";
 import { createDefaultAgentRunner } from "../../core/agent/pi-sdk-runner.js";
-import { TerminalApprovalUI } from "../../core/approval.js";
+import { AutoApprovalUI, TerminalApprovalUI } from "../../core/approval.js";
 import { runDocFlow } from "../../core/flow.js";
 import { createRunProgressController } from "../progress.js";
 
@@ -12,11 +12,18 @@ function agentFromEnv(fake: FakeAgentRunner): AgentRunner {
   return process.env.DETDOC_FAKE_AGENT === "1" ? fake : createDefaultAgentRunner();
 }
 
+interface RunOptions {
+  autoApprove?: boolean;
+  autoApply?: boolean;
+}
+
 export function registerRunCommand(program: Command, io: CliIO): void {
   program
     .command("run")
     .description("Run the documentation-diff workflow")
-    .action(async () => {
+    .option("--auto-approve", "approve the proposed plan without prompting")
+    .option("--auto-apply", "apply generated changes without prompting")
+    .action(async (options: RunOptions) => {
       const agent = new FakeAgentRunner({
         plan: {
           summary: "Test plan",
@@ -31,11 +38,12 @@ export function registerRunCommand(program: Command, io: CliIO): void {
           questions: [],
           risk: "low",
         },
-        writes: {},
+        writes: { "src/app.ts": "export const value = 2;\n" },
       });
       const progress = createRunProgressController(io);
       try {
-        const result = await runDocFlow({ cwd: process.cwd(), agent: agentFromEnv(agent), approval: new TerminalApprovalUI(io), progress: progress.report });
+        const approval = options.autoApprove ? new AutoApprovalUI(true) : new TerminalApprovalUI(io);
+        const result = await runDocFlow({ cwd: process.cwd(), agent: agentFromEnv(agent), approval, progress: progress.report });
         writeLine(io.stdout, `Run ${result.runId} ${result.applied ? "applied" : "saved"}`);
       } catch (error) {
         progress.fail();
