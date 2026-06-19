@@ -1,7 +1,9 @@
 import type { Command } from "commander";
 import type { CliIO } from "../output.js";
 import { writeLine } from "../output.js";
+import type { AgentRunner } from "../../core/agent/agent-runner.js";
 import { FakeAgentRunner } from "../../core/agent/fake-agent-runner.js";
+import { createDefaultAgentRunner } from "../../core/agent/pi-sdk-runner.js";
 import { createPlanFlow } from "../../core/flow.js";
 
 function testAgent(): FakeAgentRunner {
@@ -22,12 +24,17 @@ function testAgent(): FakeAgentRunner {
   });
 }
 
+function agentFromEnv(fake: FakeAgentRunner): AgentRunner {
+  return process.env.DETDOC_FAKE_AGENT === "1" ? fake : createDefaultAgentRunner();
+}
+
 export function registerPlanCommand(program: Command, io: CliIO): void {
   program
     .command("plan")
     .description("Create an implementation plan without applying code changes")
     .action(async () => {
-      const result = await createPlanFlow({ cwd: process.cwd(), agent: testAgent() });
+      const fakeAgent = testAgent();
+      const result = await createPlanFlow({ cwd: process.cwd(), agent: agentFromEnv(fakeAgent) });
       writeLine(io.stdout, `Plan saved for run ${result.runId}`);
     });
 }

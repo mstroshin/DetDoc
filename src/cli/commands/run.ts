@@ -1,9 +1,15 @@
 import type { Command } from "commander";
 import type { CliIO } from "../output.js";
 import { writeLine } from "../output.js";
+import type { AgentRunner } from "../../core/agent/agent-runner.js";
 import { FakeAgentRunner } from "../../core/agent/fake-agent-runner.js";
+import { createDefaultAgentRunner } from "../../core/agent/pi-sdk-runner.js";
 import { TerminalApprovalUI } from "../../core/approval.js";
 import { runDocFlow } from "../../core/flow.js";
+
+function agentFromEnv(fake: FakeAgentRunner): AgentRunner {
+  return process.env.DETDOC_FAKE_AGENT === "1" ? fake : createDefaultAgentRunner();
+}
 
 export function registerRunCommand(program: Command, io: CliIO): void {
   program
@@ -26,7 +32,7 @@ export function registerRunCommand(program: Command, io: CliIO): void {
         },
         writes: {},
       });
-      const result = await runDocFlow({ cwd: process.cwd(), agent, approval: new TerminalApprovalUI(io) });
+      const result = await runDocFlow({ cwd: process.cwd(), agent: agentFromEnv(agent), approval: new TerminalApprovalUI(io) });
       writeLine(io.stdout, `Run ${result.runId} ${result.applied ? "applied" : "saved"}`);
     });
 }
