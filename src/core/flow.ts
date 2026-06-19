@@ -30,6 +30,7 @@ export type FlowProgressPhase =
   | "collect_patch"
   | "validate_patch"
   | "apply_patch"
+  | "post_apply_validation"
   | "cleanup_worktree"
   | "done";
 
@@ -47,6 +48,14 @@ function progress(input: { progress?: FlowProgressReporter }, event: FlowProgres
 
 async function updateManifest(store: ArtifactStore, manifest: RunManifest): Promise<void> {
   await store.writeJson(manifest.runId, "manifest.json", manifest);
+}
+
+async function runPostApplyValidation(input: { cwd: string; progress?: FlowProgressReporter }, store: ArtifactStore, runId: string): Promise<void> {
+  const appliedConfig = await loadConfig(input.cwd);
+  if (appliedConfig.validation.commands.length === 0) return;
+  progress(input, { phase: "post_apply_validation", message: "Running validation commands in main worktree", runId });
+  const validationLog = await runValidationCommands({ cwd: input.cwd, config: appliedConfig });
+  await store.writeText(runId, "post-apply-validation.log", validationLog);
 }
 
 async function applyPatchToMain(repo: GitRepository, patch: string): Promise<void> {
@@ -160,7 +169,8 @@ async function runFlow(input: {
     const patch = await collectPatchForTargets(worktree.repo, approvedTargets);
     progress(input, { phase: "validate_patch", message: "Validating generated patch", runId: manifest.runId });
     const validation = await validatePatch({ patch, repo: worktree.repo, config, mode: input.mode, approvedTargets });
-    const validationLog = await runValidationCommands({ cwd: worktree.path, config });
+    const worktreeConfig = await loadConfig(worktree.path);
+    const validationLog = await runValidationCommands({ cwd: worktree.path, config: worktreeConfig });
 
     manifest.touchedFiles = await Promise.all(
       validation.changedFiles.map(async (path) => ({
@@ -176,6 +186,7 @@ async function runFlow(input: {
     progress(input, { phase: "apply_patch", message: "Applying validated patch", runId: manifest.runId });
     await applyPatchToMain(mainRepo, patch);
     keepWorktree = false;
+    await runPostApplyValidation(input, store, manifest.runId);
     completed = true;
     return { runId: manifest.runId, applied: true, patch };
   } finally {
@@ -214,6 +225,7 @@ export async function applyRun(input: { cwd: string; runId: string }): Promise<F
   }
 
   await repo.applyPatch(patch);
+  await runPostApplyValidation(input, store, input.runId);
   return { runId: input.runId, applied: true, patch };
 }
 

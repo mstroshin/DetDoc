@@ -14,6 +14,8 @@ describe("PiSdkRunner planning prompt", () => {
     expect(prompt).toContain("Every changes[].reason MUST start with `doc-diff:`");
     expect(prompt).toContain("Example: `doc-diff:docs/spec.md:L1-L20`");
     expect(prompt).toContain("Do not use free-form prose in changes[].reason");
+    expect(prompt).toContain("If the documentation names validation or generation commands");
+    expect(prompt).toContain("include `.detdoc/config.yml` in targetFiles");
   });
 
   it("states exact reason requirements for fix mode", () => {
