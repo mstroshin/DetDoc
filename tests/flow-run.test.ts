@@ -32,11 +32,59 @@ describe("DetDoc flows", () => {
       writes: { "src/app.ts": "export const value = 2;\n" },
     });
 
-    const result = await runDocFlow({ cwd: fixture.cwd, agent, approval: new AutoApprovalUI(true) });
+    const progress: string[] = [];
+    const result = await runDocFlow({ cwd: fixture.cwd, agent, approval: new AutoApprovalUI(true), progress: (event) => progress.push(event.phase) });
 
+    expect(progress).toEqual([
+      "load_config",
+      "collect_input",
+      "create_run",
+      "create_worktree",
+      "apply_input_to_worktree",
+      "plan",
+      "approve_plan",
+      "implement",
+      "collect_patch",
+      "validate_patch",
+      "approve_patch",
+      "apply_patch",
+      "cleanup_worktree",
+      "done",
+    ]);
     expect(result.applied).toBe(true);
     expect(await readFile(join(fixture.cwd, "src/app.ts"), "utf8")).toBe("export const value = 2;\n");
     expect(result.runId).toMatch(/-run-/);
+  });
+
+  it("does not report done when plan approval is rejected", async () => {
+    const fixture = await createGitFixture({ "docs/spec.md": "old\n", "src/app.ts": "export const value = 1;\n" });
+    await initConfig(fixture.cwd);
+    await writeFile(join(fixture.cwd, "docs/spec.md"), "new behavior\n", "utf8");
+
+    const agent = new FakeAgentRunner({
+      plan: {
+        summary: "Update app value",
+        changes: [
+          {
+            reason: "doc-diff:docs/spec.md:L1-L1",
+            targetFiles: ["src/app.ts"],
+            kind: "modify",
+            rationale: "The changed documentation requires value 2.",
+          },
+        ],
+        questions: [],
+        risk: "low",
+      },
+      writes: { "src/app.ts": "export const value = 2;\n" },
+    });
+    const progress: string[] = [];
+
+    await expect(runDocFlow({ cwd: fixture.cwd, agent, approval: new AutoApprovalUI(false), progress: (event) => progress.push(event.phase) })).rejects.toThrow(
+      "Plan was not approved.",
+    );
+
+    expect(progress).toContain("approve_plan");
+    expect(progress).not.toContain("done");
   });
 
   it("runs doc-diff flow that creates new approved files", async () => {

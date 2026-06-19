@@ -16,6 +16,7 @@
     "@earendil-works/pi-coding-agent": "latest",
     "boxen": "^8.0.1",
     "commander": "^14.0.0",
+    "ora": "^9.4.0",
     "picocolors": "^1.1.1",
     "picomatch": "^4.0.3",
     "typebox": "^1.0.58",

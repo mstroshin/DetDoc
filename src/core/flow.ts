@@ -18,6 +18,34 @@ export interface FlowResult {
   patch: string;
 }
 
+export type FlowProgressPhase =
+  | "load_config"
+  | "collect_input"
+  | "create_run"
+  | "create_worktree"
+  | "apply_input_to_worktree"
+  | "plan"
+  | "approve_plan"
+  | "implement"
+  | "collect_patch"
+  | "validate_patch"
+  | "approve_patch"
+  | "apply_patch"
+  | "cleanup_worktree"
+  | "done";
+
+export interface FlowProgressEvent {
+  phase: FlowProgressPhase;
+  message: string;
+  runId?: string;
+}
+
+export type FlowProgressReporter = (event: FlowProgressEvent) => void;
+
+function progress(input: { progress?: FlowProgressReporter }, event: FlowProgressEvent): void {
+  input.progress?.(event);
+}
+
 async function updateManifest(store: ArtifactStore, manifest: RunManifest): Promise<void> {
   await store.writeJson(manifest.runId, "manifest.json", manifest);
 }
@@ -71,16 +99,20 @@ async function runFlow(input: {
   message?: string;
   agent: AgentRunner;
   approval: ApprovalUI;
+  progress?: FlowProgressReporter;
 }): Promise<FlowResult> {
   const cwd = input.cwd;
+  progress(input, { phase: "load_config", message: "Loading DetDoc config" });
   const config = await loadConfig(cwd);
   const mainRepo = new GitRepository(cwd);
+  progress(input, { phase: "collect_input", message: input.mode === "run" ? "Collecting documentation changes" : "Collecting fix intent" });
   const taskInput = input.mode === "run" ? await getNormalizedDocDiff(mainRepo, config) : input.message ?? "";
   if (input.mode === "fix") await assertFixDirtyPolicy(mainRepo, config);
   if (input.mode === "fix" && taskInput.trim().length === 0) {
     throw new DetDocError("detdoc fix requires a non-empty message.", "EMPTY_FIX_MESSAGE");
   }
 
+  progress(input, { phase: "create_run", message: "Creating run artifacts" });
   const manifest = await createInitialManifest({ mode: input.mode, repo: mainRepo, config, input: taskInput });
   const store = new ArtifactStore(cwd);
   await store.createRun(manifest);
@@ -88,17 +120,24 @@ async function runFlow(input: {
   await store.writeText(manifest.runId, "config.snapshot.yml", YAML.stringify(config));
   await store.writeText(manifest.runId, "run.log", `mode=${input.mode}\n`);
 
+  progress(input, { phase: "create_worktree", message: "Creating isolated worktree", runId: manifest.runId });
   const worktree = await new WorktreeManager().createFromHead(mainRepo);
   let keepWorktree = config.worktree.keepOnFailure;
+  let completed = false;
   try {
-    if (input.mode === "run") await worktree.repo.applyPatch(taskInput);
+    if (input.mode === "run") {
+      progress(input, { phase: "apply_input_to_worktree", message: "Applying documentation changes to worktree", runId: manifest.runId });
+      await worktree.repo.applyPatch(taskInput);
+    }
 
+    progress(input, { phase: "plan", message: "Asking agent for implementation plan", runId: manifest.runId });
     const proposedPlan = validateProposedPlan(
       await input.agent.plan({ mode: input.mode, input: taskInput, config, cwd: worktree.path }),
       { config, mode: input.mode },
     );
     await store.writeJson(manifest.runId, "plan.proposed.json", proposedPlan);
 
+    progress(input, { phase: "approve_plan", message: "Waiting for plan approval", runId: manifest.runId });
     if (!(await input.approval.approvePlan(proposedPlan))) {
       throw new DetDocError("Plan was not approved.", "PLAN_NOT_APPROVED");
     }
@@ -108,6 +147,7 @@ async function runFlow(input: {
     manifest.approvedTargets = approvedTargets;
     await updateManifest(store, manifest);
 
+    progress(input, { phase: "implement", message: "Implementing approved plan", runId: manifest.runId });
     await input.agent.implement({
       mode: input.mode,
       input: taskInput,
@@ -117,7 +157,9 @@ async function runFlow(input: {
       approvedTargets,
     });
 
+    progress(input, { phase: "collect_patch", message: "Collecting generated patch", runId: manifest.runId });
     const patch = await collectPatchForTargets(worktree.repo, approvedTargets);
+    progress(input, { phase: "validate_patch", message: "Validating generated patch", runId: manifest.runId });
     const validation = await validatePatch({ patch, repo: worktree.repo, config, mode: input.mode, approvedTargets });
     const validationLog = await runValidationCommands({ cwd: worktree.path, config });
 
@@ -132,23 +174,31 @@ async function runFlow(input: {
     await store.writeText(manifest.runId, "validation.log", validationLog);
     await updateManifest(store, manifest);
 
+    progress(input, { phase: "approve_patch", message: "Waiting for patch approval", runId: manifest.runId });
     if (!(await input.approval.approvePatch(patch))) {
+      completed = true;
       return { runId: manifest.runId, applied: false, patch };
     }
 
+    progress(input, { phase: "apply_patch", message: "Applying patch to main worktree", runId: manifest.runId });
     await applyPatchToMain(mainRepo, patch);
     keepWorktree = false;
+    completed = true;
     return { runId: manifest.runId, applied: true, patch };
   } finally {
-    if (!keepWorktree) await worktree.cleanup();
+    if (!keepWorktree) {
+      progress(input, { phase: "cleanup_worktree", message: "Cleaning up isolated worktree", runId: manifest.runId });
+      await worktree.cleanup();
+    }
+    if (completed) progress(input, { phase: "done", message: "Run complete", runId: manifest.runId });
   }
 }
 
-export async function runDocFlow(input: { cwd: string; agent: AgentRunner; approval: ApprovalUI }): Promise<FlowResult> {
+export async function runDocFlow(input: { cwd: string; agent: AgentRunner; approval: ApprovalUI; progress?: FlowProgressReporter }): Promise<FlowResult> {
   return runFlow({ ...input, mode: "run" });
 }
 
-export async function runFixFlow(input: { cwd: string; message: string; agent: AgentRunner; approval: ApprovalUI }): Promise<FlowResult> {
+export async function runFixFlow(input: { cwd: string; message: string; agent: AgentRunner; approval: ApprovalUI; progress?: FlowProgressReporter }): Promise<FlowResult> {
   return runFlow({ ...input, mode: "fix" });
 }
 
