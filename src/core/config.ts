@@ -185,8 +185,8 @@ async function writeIfMissing(path: string, content: string): Promise<boolean> {
   return true;
 }
 
-async function git(cwd: string, args: string[]): Promise<string> {
-  const { stdout } = await execFileAsync("git", args, { cwd, env: process.env });
+async function git(cwd: string, args: string[], env: NodeJS.ProcessEnv = process.env): Promise<string> {
+  const { stdout } = await execFileAsync("git", args, { cwd, env });
   return stdout;
 }
 
@@ -211,15 +211,44 @@ async function gitStatus(cwd: string): Promise<string> {
   return git(cwd, ["status", "--porcelain=v1", "--untracked-files=all"]);
 }
 
+async function initGitRepository(cwd: string): Promise<boolean> {
+  if (await isInsideGitRepository(cwd)) return false;
+  try {
+    await git(cwd, ["init", "-b", "main"]);
+  } catch {
+    await git(cwd, ["init"]);
+  }
+  return true;
+}
+
 async function shouldCreateInitialCommit(cwd: string): Promise<boolean> {
   if (!(await isInsideGitRepository(cwd))) return false;
   return (await gitStatus(cwd)).trim() === "";
 }
 
+async function hasLocalCommitIdentity(cwd: string): Promise<boolean> {
+  try {
+    const name = (await git(cwd, ["config", "user.name"])).trim();
+    const email = (await git(cwd, ["config", "user.email"])).trim();
+    return name.length > 0 && email.length > 0;
+  } catch {
+    return false;
+  }
+}
+
 async function createInitialCommit(cwd: string, files: string[]): Promise<boolean> {
   if (files.length === 0) return false;
   await git(cwd, ["add", "--", ...files]);
-  await git(cwd, ["commit", "-m", "Initial DetDoc setup"]);
+  const env = (await hasLocalCommitIdentity(cwd))
+    ? process.env
+    : {
+        ...process.env,
+        GIT_AUTHOR_NAME: process.env.GIT_AUTHOR_NAME ?? "DetDoc",
+        GIT_AUTHOR_EMAIL: process.env.GIT_AUTHOR_EMAIL ?? "detdoc@example.invalid",
+        GIT_COMMITTER_NAME: process.env.GIT_COMMITTER_NAME ?? "DetDoc",
+        GIT_COMMITTER_EMAIL: process.env.GIT_COMMITTER_EMAIL ?? "detdoc@example.invalid",
+      };
+  await git(cwd, ["commit", "-m", "Initial DetDoc setup"], env);
   return true;
 }
 
@@ -250,10 +279,11 @@ export async function initStarterDocs(cwd: string): Promise<string[]> {
   return created;
 }
 
-export async function initConfig(cwd: string): Promise<{ created: boolean; path: string; docsCreated: string[]; initialCommitCreated: boolean }> {
+export async function initConfig(cwd: string): Promise<{ created: boolean; path: string; docsCreated: string[]; initialCommitCreated: boolean; gitInitialized: boolean }> {
   const path = configPath(cwd);
   const configExists = await exists(path);
-  const createInitialCommitAfterInit = await shouldCreateInitialCommit(cwd);
+  const gitInitialized = await initGitRepository(cwd);
+  const createInitialCommitAfterInit = gitInitialized || (await shouldCreateInitialCommit(cwd));
   const generatedFiles: string[] = [];
 
   await mkdir(dirname(path), { recursive: true });
@@ -270,7 +300,7 @@ export async function initConfig(cwd: string): Promise<{ created: boolean; path:
   }
   const docsCreated = await initStarterDocs(cwd);
   const initialCommitCreated = createInitialCommitAfterInit ? await createInitialCommit(cwd, generatedFiles) : false;
-  return { created: !configExists, path, docsCreated, initialCommitCreated };
+  return { created: !configExists, path, docsCreated, initialCommitCreated, gitInitialized };
 }
 
 export async function loadConfig(cwd: string): Promise<DetDocConfig> {

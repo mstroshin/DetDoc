@@ -9,6 +9,9 @@ export function registerInitCommand(program: Command, io: CliIO): void {
     .description("Create .detdoc/config.yml")
     .action(async () => {
       const result = await initConfig(process.cwd());
+      if (result.gitInitialized) {
+        writeLine(io.stdout, "Initialized git repository");
+      }
       if (result.created) {
         writeLine(io.stdout, "Created .detdoc/config.yml");
       } else {

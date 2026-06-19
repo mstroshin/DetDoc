@@ -95,6 +95,29 @@ describe("config", () => {
     expect(await readFile(join(cwd, ".gitignore"), "utf8")).toBe(".DS_Store\n");
   });
 
+  it("initializes git and creates a setup commit when no repository exists", async () => {
+    const cwd = await tempDir();
+    await writeFile(join(cwd, "user-file.txt"), "keep me untracked\n", "utf8");
+
+    const result = await initConfig(cwd);
+
+    expect(result.gitInitialized).toBe(true);
+    expect(result.initialCommitCreated).toBe(true);
+    expect((await git(cwd, ["rev-parse", "--is-inside-work-tree"])).trim()).toBe("true");
+    expect((await git(cwd, ["log", "--oneline", "-1"]))).toContain("Initial DetDoc setup");
+
+    const committedFiles = await git(cwd, ["show", "--name-only", "--format=", "HEAD"]);
+    expect(committedFiles).toContain(".gitignore");
+    expect(committedFiles).toContain(".detdoc/config.yml");
+    expect(committedFiles).toContain(".detdoc/runs/.gitkeep");
+    expect(committedFiles).not.toContain("docs/idea.md");
+    expect(committedFiles).not.toContain("user-file.txt");
+
+    const status = await git(cwd, ["status", "--short", "--untracked-files=all"]);
+    expect(status).toContain("?? docs/idea.md");
+    expect(status).toContain("?? user-file.txt");
+  });
+
   it("creates an initial DetDoc setup commit without committing starter docs", async () => {
     const cwd = await tempDir();
     await git(cwd, ["init", "-b", "main"]);
@@ -180,6 +203,7 @@ describe("config", () => {
       const io = createTestIO();
       const code = await runCli(["node", "detdoc", "init"], io);
       expect(code).toBe(0);
+      expect(io.stdoutText()).toContain("Initialized git repository");
       expect(io.stdoutText()).toContain("Created .detdoc/config.yml");
     } finally {
       process.chdir(oldCwd);
