@@ -1,4 +1,4 @@
-import { writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createTestIO } from "./helpers/test-io.js";
@@ -22,6 +22,21 @@ describe("normalized doc diff", () => {
     expect(diff).toContain("-old");
     expect(diff).toContain("+new");
     expect(diff.endsWith("\n")).toBe(true);
+  });
+
+  it("includes untracked markdown files as new file patches without staging them", async () => {
+    const fixture = await createGitFixture({ "docs/spec.md": "old\n" });
+    await mkdir(join(fixture.cwd, "docs", "features"), { recursive: true });
+    await writeFile(join(fixture.cwd, "docs", "features", "main_screen.md"), "# Main Screen\n\nShow songs.\n", "utf8");
+
+    const diff = await getNormalizedDocDiff(new GitRepository(fixture.cwd), defaultConfig());
+
+    expect(diff).toContain("diff --git a/docs/features/main_screen.md b/docs/features/main_screen.md");
+    expect(diff).toContain("new file mode 100644");
+    expect(diff).toContain("+# Main Screen");
+    expect(await fixture.git(["status", "--short", "--untracked-files=all"])).toMatchObject({
+      stdout: expect.stringContaining("?? docs/features/main_screen.md"),
+    });
   });
 
   it("excludes tracked DetDoc metadata from normalized doc diff", async () => {
