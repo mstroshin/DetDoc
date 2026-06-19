@@ -13,8 +13,31 @@ const validationCommandSchema = z.object({
   run: z.string().min(1),
 });
 
+const validationRunCommandInputSchema = z
+  .object({
+    name: z.string().min(1).optional(),
+    run: z.string().min(1),
+  })
+  .transform((command) => ({ name: command.name ?? command.run, run: command.run }));
+
+const validationCommandAliasInputSchema = z
+  .object({
+    name: z.string().min(1).optional(),
+    command: z.string().min(1),
+  })
+  .transform((command) => ({ name: command.name ?? command.command, run: command.command }));
+
+const validationCmdAliasInputSchema = z
+  .object({
+    name: z.string().min(1).optional(),
+    cmd: z.string().min(1),
+  })
+  .transform((command) => ({ name: command.name ?? command.cmd, run: command.cmd }));
+
 const validationCommandInputSchema = z.union([
-  validationCommandSchema,
+  validationRunCommandInputSchema,
+  validationCommandAliasInputSchema,
+  validationCmdAliasInputSchema,
   z.string().min(1).transform((command) => ({ name: command, run: command })),
 ]);
 
