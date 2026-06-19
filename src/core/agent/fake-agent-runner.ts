@@ -20,6 +20,7 @@ export class FakeAgentRunner implements AgentRunner {
       if (!request.approvedTargets.includes(relativePath)) {
         throw new Error(`FakeAgentRunner attempted unapproved write: ${relativePath}`);
       }
+      request.progress?.({ action: "write", path: relativePath });
       const absolute = join(request.cwd, relativePath);
       await mkdir(dirname(absolute), { recursive: true });
       await writeFile(absolute, content, "utf8");

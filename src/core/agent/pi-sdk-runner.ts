@@ -81,6 +81,7 @@ function guardExtension(request: ImplementRequest): ExtensionFactory {
       if (!allowed.has(rawPath)) {
         return { block: true, reason: `DetDoc blocked unapproved path: ${rawPath}` };
       }
+      request.progress?.({ action: event.toolName, path: rawPath });
       return undefined;
     });
   };

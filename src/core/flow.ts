@@ -46,6 +46,10 @@ function progress(input: { progress?: FlowProgressReporter }, event: FlowProgres
   input.progress?.(event);
 }
 
+function agentActionMessage(action: "edit" | "write", path: string): string {
+  return `Agent is ${action === "write" ? "writing" : "editing"} ${path}`;
+}
+
 async function updateManifest(store: ArtifactStore, manifest: RunManifest): Promise<void> {
   await store.writeJson(manifest.runId, "manifest.json", manifest);
 }
@@ -163,6 +167,7 @@ async function runFlow(input: {
       cwd: worktree.path,
       approvedPlan: proposedPlan,
       approvedTargets,
+      progress: (event) => progress(input, { phase: "implement", message: agentActionMessage(event.action, event.path), runId: manifest.runId }),
     });
 
     progress(input, { phase: "collect_patch", message: "Collecting generated patch", runId: manifest.runId });

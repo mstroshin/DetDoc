@@ -9,6 +9,13 @@ export interface PlanRequest {
   cwd: string;
 }
 
+export interface AgentImplementationProgressEvent {
+  action: "edit" | "write";
+  path: string;
+}
+
+export type AgentImplementationProgressReporter = (event: AgentImplementationProgressEvent) => void;
+
 export interface ImplementRequest {
   mode: RunMode;
   input: string;
@@ -16,6 +23,7 @@ export interface ImplementRequest {
   cwd: string;
   approvedPlan: ProposedPlan;
   approvedTargets: string[];
+  progress?: AgentImplementationProgressReporter;
 }
 
 export interface AgentRunner {
