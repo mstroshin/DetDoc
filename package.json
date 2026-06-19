@@ -1,0 +1,29 @@
+{
+  "name": "detdoc",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "detdoc": "./dist/src/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/index.ts",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "latest",
+    "commander": "^14.0.0",
+    "picomatch": "^4.0.3",
+    "typebox": "^1.0.58",
+    "yaml": "^2.8.1",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.0"
+  }
+}
