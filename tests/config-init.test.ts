@@ -1,17 +1,34 @@
+import { execFile } from "node:child_process";
 import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import { createTestIO } from "./helpers/test-io.js";
 import { runCli } from "../src/cli/main.js";
 import { defaultConfig, initConfig, loadConfig } from "../src/core/config.js";
 
+const execFileAsync = promisify(execFile);
 const dirs: string[] = [];
 
 async function tempDir(): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), "detdoc-config-"));
   dirs.push(dir);
   return dir;
+}
+
+async function git(cwd: string, args: string[]): Promise<string> {
+  const { stdout } = await execFileAsync("git", args, {
+    cwd,
+    env: {
+      ...process.env,
+      GIT_AUTHOR_NAME: "DetDoc Test",
+      GIT_AUTHOR_EMAIL: "detdoc@example.com",
+      GIT_COMMITTER_NAME: "DetDoc Test",
+      GIT_COMMITTER_EMAIL: "detdoc@example.com",
+    },
+  });
+  return stdout;
 }
 
 afterEach(async () => {
@@ -68,6 +85,52 @@ describe("config", () => {
 
     expect(await readFile(join(cwd, "docs", "idea.md"), "utf8")).toBe("custom idea\n");
     expect(await readFile(join(cwd, "docs", "technical-spec.md"), "utf8")).toContain("# Technical Specification");
+  });
+
+  it("creates gitignore with macOS metadata ignored", async () => {
+    const cwd = await tempDir();
+
+    await initConfig(cwd);
+
+    expect(await readFile(join(cwd, ".gitignore"), "utf8")).toBe(".DS_Store\n");
+  });
+
+  it("creates an initial DetDoc setup commit in an empty git repository", async () => {
+    const cwd = await tempDir();
+    await git(cwd, ["init", "-b", "main"]);
+    await git(cwd, ["config", "user.name", "DetDoc Test"]);
+    await git(cwd, ["config", "user.email", "detdoc@example.com"]);
+
+    const result = await initConfig(cwd);
+
+    expect(result.initialCommitCreated).toBe(true);
+    expect((await git(cwd, ["log", "--oneline", "-1"]))).toContain("Initial DetDoc setup");
+    expect(await git(cwd, ["status", "--short"])).toBe("");
+    expect(await git(cwd, ["show", "--name-only", "--format=", "HEAD"])).toContain(".gitignore");
+    expect(await git(cwd, ["show", "--name-only", "--format=", "HEAD"])).toContain(".detdoc/config.yml");
+    expect(await git(cwd, ["show", "--name-only", "--format=", "HEAD"])).toContain("docs/idea.md");
+  });
+
+  it("does not create an initial commit when an empty git repository already has user changes", async () => {
+    const cwd = await tempDir();
+    await git(cwd, ["init", "-b", "main"]);
+    await writeFile(join(cwd, "user-file.txt"), "keep me uncommitted\n", "utf8");
+
+    const result = await initConfig(cwd);
+
+    expect(result.initialCommitCreated).toBe(false);
+    await expect(git(cwd, ["rev-parse", "--verify", "HEAD"])).rejects.toThrow();
+    expect(await git(cwd, ["status", "--short"])).toContain("user-file.txt");
+  });
+
+  it("adds macOS metadata ignore to existing gitignore without duplicating it", async () => {
+    const cwd = await tempDir();
+    await writeFile(join(cwd, ".gitignore"), "node_modules/\n", "utf8");
+
+    await initConfig(cwd);
+    await initConfig(cwd);
+
+    expect(await readFile(join(cwd, ".gitignore"), "utf8")).toBe("node_modules/\n.DS_Store\n");
   });
 
   it("does not overwrite an existing config", async () => {

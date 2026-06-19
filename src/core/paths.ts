@@ -25,8 +25,12 @@ function isDetDocInternalPath(path: string): boolean {
   return normalizePath(path).startsWith(".detdoc/");
 }
 
+function isWorkspaceHousekeepingPath(path: string): boolean {
+  return normalizePath(path) === ".gitignore";
+}
+
 function nonDocDirty(files: DirtyFile[], config: DetDocConfig): DirtyFile[] {
-  return files.filter((file) => !isDetDocInternalPath(file.path) && !isDocPath(file.path, config));
+  return files.filter((file) => !isDetDocInternalPath(file.path) && !isWorkspaceHousekeepingPath(file.path) && !isDocPath(file.path, config));
 }
 
 export async function assertRunDirtyPolicy(repo: GitRepository, config: DetDocConfig): Promise<DirtyFile[]> {

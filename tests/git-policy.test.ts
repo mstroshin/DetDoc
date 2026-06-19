@@ -34,6 +34,20 @@ describe("dirty-state policy", () => {
     ]);
   });
 
+  it("allows generated gitignore housekeeping alongside dirty docs", async () => {
+    const fixture = await createGitFixture({ "docs/spec.md": "old\n" });
+    await writeFile(join(fixture.cwd, "docs/spec.md"), "new\n", "utf8");
+    await writeFile(join(fixture.cwd, ".gitignore"), ".DS_Store\n", "utf8");
+
+    const dirty = await assertRunDirtyPolicy(new GitRepository(fixture.cwd), defaultConfig());
+    expect(dirty).toEqual(
+      expect.arrayContaining([
+        { path: ".gitignore", status: "??" },
+        { path: "docs/spec.md", status: " M" },
+      ]),
+    );
+  });
+
   it("rejects run when code is dirty", async () => {
     const fixture = await createGitFixture({ "docs/spec.md": "old\n", "src/app.ts": "export const x = 1;\n" });
     await writeFile(join(fixture.cwd, "src/app.ts"), "export const x = 2;\n", "utf8");

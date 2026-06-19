@@ -1,8 +1,12 @@
+import { execFile } from "node:child_process";
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { promisify } from "node:util";
 import YAML from "yaml";
 import { z } from "zod";
 import { DetDocError } from "./errors.js";
+
+const execFileAsync = promisify(execFile);
 
 const validationCommandSchema = z.object({
   name: z.string().min(1),
@@ -181,6 +185,61 @@ async function writeIfMissing(path: string, content: string): Promise<boolean> {
   return true;
 }
 
+async function git(cwd: string, args: string[]): Promise<string> {
+  const { stdout } = await execFileAsync("git", args, { cwd, env: process.env });
+  return stdout;
+}
+
+async function isInsideGitRepository(cwd: string): Promise<boolean> {
+  try {
+    return (await git(cwd, ["rev-parse", "--is-inside-work-tree"])).trim() === "true";
+  } catch {
+    return false;
+  }
+}
+
+async function hasGitHead(cwd: string): Promise<boolean> {
+  try {
+    await git(cwd, ["rev-parse", "--verify", "HEAD"]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function gitStatus(cwd: string): Promise<string> {
+  return git(cwd, ["status", "--porcelain=v1", "--untracked-files=all"]);
+}
+
+async function shouldCreateInitialCommit(cwd: string): Promise<boolean> {
+  if (!(await isInsideGitRepository(cwd))) return false;
+  if (await hasGitHead(cwd)) return false;
+  return (await gitStatus(cwd)).trim() === "";
+}
+
+async function createInitialCommit(cwd: string, files: string[]): Promise<boolean> {
+  if (files.length === 0) return false;
+  await git(cwd, ["add", "--", ...files]);
+  await git(cwd, ["commit", "-m", "Initial DetDoc setup"]);
+  return true;
+}
+
+async function ensureGitignoreEntry(cwd: string, entry: string): Promise<boolean> {
+  const path = join(cwd, ".gitignore");
+  if (!(await exists(path))) {
+    await writeFile(path, `${entry}\n`, "utf8");
+    return true;
+  }
+
+  const current = await readFile(path, "utf8");
+  const lines = current.split(/\r?\n/).map((line) => line.trim());
+  if (lines.includes(entry)) return false;
+
+  const separator = current.length === 0 || current.endsWith("\n") ? "" : "\n";
+  await writeFile(path, `${current}${separator}${entry}\n`, "utf8");
+  return true;
+}
+
 export async function initStarterDocs(cwd: string): Promise<string[]> {
   const created: string[] = [];
   for (const doc of starterDocs()) {
@@ -192,18 +251,28 @@ export async function initStarterDocs(cwd: string): Promise<string[]> {
   return created;
 }
 
-export async function initConfig(cwd: string): Promise<{ created: boolean; path: string; docsCreated: string[] }> {
+export async function initConfig(cwd: string): Promise<{ created: boolean; path: string; docsCreated: string[]; initialCommitCreated: boolean }> {
   const path = configPath(cwd);
   const configExists = await exists(path);
+  const createInitialCommitAfterInit = await shouldCreateInitialCommit(cwd);
+  const generatedFiles: string[] = [];
 
   await mkdir(dirname(path), { recursive: true });
   await mkdir(join(cwd, ".detdoc", "runs"), { recursive: true });
   if (!configExists) {
     await writeFile(path, defaultConfigYaml(), "utf8");
+    generatedFiles.push(".detdoc/config.yml");
   }
-  await writeIfMissing(join(cwd, ".detdoc", "runs", ".gitkeep"), "");
+  if (await writeIfMissing(join(cwd, ".detdoc", "runs", ".gitkeep"), "")) {
+    generatedFiles.push(".detdoc/runs/.gitkeep");
+  }
+  if (await ensureGitignoreEntry(cwd, ".DS_Store")) {
+    generatedFiles.push(".gitignore");
+  }
   const docsCreated = await initStarterDocs(cwd);
-  return { created: !configExists, path, docsCreated };
+  generatedFiles.push(...docsCreated);
+  const initialCommitCreated = createInitialCommitAfterInit ? await createInitialCommit(cwd, generatedFiles) : false;
+  return { created: !configExists, path, docsCreated, initialCommitCreated };
 }
 
 export async function loadConfig(cwd: string): Promise<DetDocConfig> {

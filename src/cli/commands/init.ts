@@ -17,5 +17,8 @@ export function registerInitCommand(program: Command, io: CliIO): void {
       if (result.docsCreated.length > 0) {
         writeLine(io.stdout, `Created starter docs: ${result.docsCreated.join(", ")}`);
       }
+      if (result.initialCommitCreated) {
+        writeLine(io.stdout, "Created initial commit: Initial DetDoc setup");
+      }
     });
 }
