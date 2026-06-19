@@ -210,6 +210,45 @@ describe("config", () => {
     }
   });
 
+  it("accepts validation commands written as string shorthand", async () => {
+    const cwd = await tempDir();
+    await initConfig(cwd);
+    await writeFile(
+      join(cwd, ".detdoc", "config.yml"),
+      `docs:
+  include:
+    - "**/*.md"
+  exclude:
+    - .detdoc/**
+    - node_modules/**
+paths:
+  deny:
+    - .env
+    - .env.*
+    - node_modules/**
+    - .git/**
+validation:
+  commands:
+    - xcodegen generate
+    - swift test
+agent:
+  provider: pi-sdk
+  model: null
+  thinking: high
+worktree:
+  keepOnFailure: true
+`,
+      "utf8",
+    );
+
+    const config = await loadConfig(cwd);
+
+    expect(config.validation.commands).toEqual([
+      { name: "xcodegen generate", run: "xcodegen generate" },
+      { name: "swift test", run: "swift test" },
+    ]);
+  });
+
   it("has stable defaults", () => {
     expect(defaultConfig()).toEqual({
       docs: {

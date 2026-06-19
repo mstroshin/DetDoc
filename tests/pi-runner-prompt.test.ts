@@ -16,6 +16,7 @@ describe("PiSdkRunner planning prompt", () => {
     expect(prompt).toContain("Do not use free-form prose in changes[].reason");
     expect(prompt).toContain("If the documentation names validation or generation commands");
     expect(prompt).toContain("include `.detdoc/config.yml` in targetFiles");
+    expect(prompt).toContain("Prefer validation.commands entries shaped as `{ name, run }`");
   });
 
   it("states exact reason requirements for fix mode", () => {

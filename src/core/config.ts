@@ -13,6 +13,11 @@ const validationCommandSchema = z.object({
   run: z.string().min(1),
 });
 
+const validationCommandInputSchema = z.union([
+  validationCommandSchema,
+  z.string().min(1).transform((command) => ({ name: command, run: command })),
+]);
+
 const configSchema = z.object({
   docs: z.object({
     include: z.array(z.string().min(1)).default(["**/*.md"]),
@@ -22,7 +27,7 @@ const configSchema = z.object({
     deny: z.array(z.string().min(1)).default([".env", ".env.*", "node_modules/**", ".git/**"]),
   }),
   validation: z.object({
-    commands: z.array(validationCommandSchema).default([]),
+    commands: z.array(validationCommandInputSchema).default([]),
   }),
   agent: z.object({
     provider: z.literal("pi-sdk").default("pi-sdk"),

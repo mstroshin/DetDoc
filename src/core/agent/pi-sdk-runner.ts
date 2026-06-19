@@ -59,7 +59,7 @@ export function buildPlanningPrompt(request: PlanRequest): string {
     "- changes[].rationale: explain why the target follows from the input.",
     `- ${reasonRule}`,
     "Do not use free-form prose in changes[].reason; it must follow the exact prefix/value rule above.",
-    "If the documentation names validation or generation commands that DetDoc should run after applying changes, inspect `.detdoc/config.yml`; if those commands are missing, include `.detdoc/config.yml` in targetFiles and update validation.commands.",
+    "If the documentation names validation or generation commands that DetDoc should run after applying changes, inspect `.detdoc/config.yml`; if those commands are missing, include `.detdoc/config.yml` in targetFiles and update validation.commands. Prefer validation.commands entries shaped as `{ name, run }`.",
     "Denied paths from config must never be targeted:",
     JSON.stringify(request.config.paths.deny),
     `Mode: ${request.mode}`,
