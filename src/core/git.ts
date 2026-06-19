@@ -60,6 +60,11 @@ export class GitRepository {
     return this.git(["diff", "--no-color", "--no-ext-diff", "--binary", "--", "."]);
   }
 
+  async diffPaths(paths: string[]): Promise<string> {
+    if (paths.length === 0) return "";
+    return this.git(["diff", "--no-color", "--no-ext-diff", "--binary", "--", ...paths]);
+  }
+
   async diffNameOnly(): Promise<string[]> {
     const output = await this.git(["diff", "--name-only", "--", "."]);
     return output.split("\n").filter(Boolean);

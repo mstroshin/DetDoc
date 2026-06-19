@@ -24,6 +24,17 @@ describe("normalized doc diff", () => {
     expect(diff.endsWith("\n")).toBe(true);
   });
 
+  it("excludes tracked DetDoc metadata from normalized doc diff", async () => {
+    const fixture = await createGitFixture({ "README.md": "old\n", ".detdoc/config.yml": "old-config\n" });
+    await writeFile(join(fixture.cwd, "README.md"), "new\n", "utf8");
+    await writeFile(join(fixture.cwd, ".detdoc/config.yml"), "new-config\n", "utf8");
+
+    const diff = await getNormalizedDocDiff(new GitRepository(fixture.cwd), defaultConfig());
+
+    expect(diff).toContain("diff --git a/README.md b/README.md");
+    expect(diff).not.toContain(".detdoc/config.yml");
+  });
+
   it("prints diff through CLI", async () => {
     const fixture = await createGitFixture({ "docs/spec.md": "old\n" });
     await initConfig(fixture.cwd);
