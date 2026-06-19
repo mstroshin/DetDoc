@@ -39,6 +39,38 @@ describe("DetDoc flows", () => {
     expect(result.runId).toMatch(/-run-/);
   });
 
+  it("runs doc-diff flow that creates new approved files", async () => {
+    const fixture = await createGitFixture({ "docs/spec.md": "old\n" });
+    await initConfig(fixture.cwd);
+    await writeFile(join(fixture.cwd, "docs/spec.md"), "create a tiny greeter\n", "utf8");
+
+    const agent = new FakeAgentRunner({
+      plan: {
+        summary: "Create greeter files",
+        changes: [
+          {
+            reason: "doc-diff:docs/spec.md:L1-L1",
+            targetFiles: ["package.json", "src/index.js"],
+            kind: "create",
+            rationale: "The changed documentation asks for a tiny greeter project.",
+          },
+        ],
+        questions: [],
+        risk: "low",
+      },
+      writes: {
+        "package.json": "{\"scripts\":{\"start\":\"node src/index.js\"}}\n",
+        "src/index.js": "console.log('Hello from DetDoc!');\n",
+      },
+    });
+
+    const result = await runDocFlow({ cwd: fixture.cwd, agent, approval: new AutoApprovalUI(true) });
+
+    expect(result.applied).toBe(true);
+    expect(await readFile(join(fixture.cwd, "package.json"), "utf8")).toContain("start");
+    expect(await readFile(join(fixture.cwd, "src/index.js"), "utf8")).toContain("Hello from DetDoc!");
+  });
+
   it("runs fix flow while ignoring dirty docs", async () => {
     const fixture = await createGitFixture({ "docs/spec.md": "old\n", "src/app.ts": "export const value = 1;\n" });
     await initConfig(fixture.cwd);

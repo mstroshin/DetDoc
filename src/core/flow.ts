@@ -30,6 +30,7 @@ async function collectPatchForTargets(repo: GitRepository, approvedTargets: stri
   if (approvedTargets.length === 0) {
     throw new DetDocError("Approved plan contains no target files.", "NO_APPROVED_TARGETS");
   }
+  await repo.git(["add", "-N", "--", ...approvedTargets]).catch(() => undefined);
   const patch = await repo.git(["diff", "--no-color", "--no-ext-diff", "--binary", "--", ...approvedTargets]);
   if (patch.trim().length === 0) {
     throw new DetDocError("Agent produced no code changes for approved target files.", "EMPTY_PATCH");
