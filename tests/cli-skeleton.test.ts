@@ -18,11 +18,12 @@ describe("CLI skeleton", () => {
     expect(io.stdoutText()).toContain("replay");
   });
 
-  it("returns a non-zero code for unknown commands", async () => {
+  it("returns a non-zero code for unknown commands without duplicating the error", async () => {
     const io = createTestIO();
     const code = await runCli(["node", "detdoc", "unknown"], io);
 
     expect(code).toBe(1);
-    expect(io.stderrText()).toContain("unknown command");
+    const occurrences = io.stderrText().match(/unknown command/g) ?? [];
+    expect(occurrences).toHaveLength(1);
   });
 });

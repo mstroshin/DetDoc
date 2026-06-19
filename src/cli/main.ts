@@ -23,6 +23,10 @@ function isHelpDisplayed(error: unknown): boolean {
   return error instanceof CommanderError && error.code === "commander.helpDisplayed";
 }
 
+function isCommanderUsageError(error: unknown): error is CommanderError {
+  return error instanceof CommanderError;
+}
+
 export async function runCli(argv: string[], io: CliIO = defaultIO()): Promise<number> {
   const program = new Command();
   program
@@ -47,6 +51,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO()): Promise<n
     return 0;
   } catch (error) {
     if (isHelpDisplayed(error)) return 0;
+    if (isCommanderUsageError(error)) return error.exitCode || 1;
     const message = toErrorMessage(error);
     writeLine(io.stderr, message);
     return 1;
