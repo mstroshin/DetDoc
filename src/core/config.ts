@@ -270,7 +270,6 @@ export async function initConfig(cwd: string): Promise<{ created: boolean; path:
     generatedFiles.push(".gitignore");
   }
   const docsCreated = await initStarterDocs(cwd);
-  generatedFiles.push(...docsCreated);
   const initialCommitCreated = createInitialCommitAfterInit ? await createInitialCommit(cwd, generatedFiles) : false;
   return { created: !configExists, path, docsCreated, initialCommitCreated };
 }
