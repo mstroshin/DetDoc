@@ -8,7 +8,7 @@ function isFinalEvent(event: FlowProgressEvent): boolean {
 }
 
 function isApprovalEvent(event: FlowProgressEvent): boolean {
-  return event.phase === "approve_plan" || event.phase === "approve_patch";
+  return event.phase === "approve_plan";
 }
 
 function createFallbackProgressReporter(io: CliIO): FlowProgressReporter {
@@ -60,6 +60,7 @@ export function createRunProgressController(io: CliIO): RunProgressController {
     },
     fail(message = "Run failed") {
       if (spinner?.isSpinning) spinner.fail(message);
+      else ora({ text: message, stream: io.stderr }).fail();
       spinner = undefined;
     },
   };

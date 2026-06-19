@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { AutoApprovalUI } from "../src/core/approval.js";
+import { AutoApprovalUI, type ApprovalUI } from "../src/core/approval.js";
 import { initConfig } from "../src/core/config.js";
 import { FakeAgentRunner } from "../src/core/agent/fake-agent-runner.js";
 import { runDocFlow, runFixFlow } from "../src/core/flow.js";
@@ -33,7 +33,12 @@ describe("DetDoc flows", () => {
     });
 
     const progress: string[] = [];
-    const result = await runDocFlow({ cwd: fixture.cwd, agent, approval: new AutoApprovalUI(true), progress: (event) => progress.push(event.phase) });
+    const approval: ApprovalUI = {
+      async approvePlan() {
+        return true;
+      },
+    };
+    const result = await runDocFlow({ cwd: fixture.cwd, agent, approval, progress: (event) => progress.push(event.phase) });
 
     expect(progress).toEqual([
       "load_config",
@@ -46,7 +51,6 @@ describe("DetDoc flows", () => {
       "implement",
       "collect_patch",
       "validate_patch",
-      "approve_patch",
       "apply_patch",
       "cleanup_worktree",
       "done",

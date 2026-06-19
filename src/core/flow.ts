@@ -29,7 +29,6 @@ export type FlowProgressPhase =
   | "implement"
   | "collect_patch"
   | "validate_patch"
-  | "approve_patch"
   | "apply_patch"
   | "cleanup_worktree"
   | "done";
@@ -130,7 +129,7 @@ async function runFlow(input: {
       await worktree.repo.applyPatch(taskInput);
     }
 
-    progress(input, { phase: "plan", message: "Asking agent for implementation plan", runId: manifest.runId });
+    progress(input, { phase: "plan", message: "Agent is planning code changes", runId: manifest.runId });
     const proposedPlan = validateProposedPlan(
       await input.agent.plan({ mode: input.mode, input: taskInput, config, cwd: worktree.path }),
       { config, mode: input.mode },
@@ -147,7 +146,7 @@ async function runFlow(input: {
     manifest.approvedTargets = approvedTargets;
     await updateManifest(store, manifest);
 
-    progress(input, { phase: "implement", message: "Implementing approved plan", runId: manifest.runId });
+    progress(input, { phase: "implement", message: "Agent is editing approved files", runId: manifest.runId });
     await input.agent.implement({
       mode: input.mode,
       input: taskInput,
@@ -174,13 +173,7 @@ async function runFlow(input: {
     await store.writeText(manifest.runId, "validation.log", validationLog);
     await updateManifest(store, manifest);
 
-    progress(input, { phase: "approve_patch", message: "Waiting for patch approval", runId: manifest.runId });
-    if (!(await input.approval.approvePatch(patch))) {
-      completed = true;
-      return { runId: manifest.runId, applied: false, patch };
-    }
-
-    progress(input, { phase: "apply_patch", message: "Applying patch to main worktree", runId: manifest.runId });
+    progress(input, { phase: "apply_patch", message: "Applying validated patch", runId: manifest.runId });
     await applyPatchToMain(mainRepo, patch);
     keepWorktree = false;
     completed = true;
@@ -202,7 +195,7 @@ export async function runFixFlow(input: { cwd: string; message: string; agent: A
   return runFlow({ ...input, mode: "fix" });
 }
 
-export async function applyRun(input: { cwd: string; runId: string; approval: ApprovalUI }): Promise<FlowResult> {
+export async function applyRun(input: { cwd: string; runId: string }): Promise<FlowResult> {
   const repo = new GitRepository(input.cwd);
   const store = new ArtifactStore(input.cwd);
   const manifest = await store.readJson<RunManifest>(input.runId, "manifest.json");
@@ -218,10 +211,6 @@ export async function applyRun(input: { cwd: string; runId: string; approval: Ap
     if (current !== file.before) {
       throw new DetDocError(`Cannot apply ${input.runId}: preimage hash mismatch for ${file.path}.`, "APPLY_PREIMAGE_MISMATCH");
     }
-  }
-
-  if (!(await input.approval.approvePatch(patch))) {
-    return { runId: input.runId, applied: false, patch };
   }
 
   await repo.applyPatch(patch);
