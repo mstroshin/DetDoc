@@ -92,7 +92,7 @@ describe("config", () => {
 
     await initConfig(cwd);
 
-    expect(await readFile(join(cwd, ".gitignore"), "utf8")).toBe(".DS_Store\n.detdoc/runs/*\n!.detdoc/runs/.gitkeep\n");
+    expect(await readFile(join(cwd, ".gitignore"), "utf8")).toBe(".DS_Store\n.detdoc/runs/*\n!.detdoc/runs/.gitkeep\n.worktrees/\n");
   });
 
   it("initializes git and creates a setup commit when no repository exists", async () => {
@@ -184,7 +184,7 @@ describe("config", () => {
     await initConfig(cwd);
     await initConfig(cwd);
 
-    expect(await readFile(join(cwd, ".gitignore"), "utf8")).toBe("node_modules/\n.DS_Store\n.detdoc/runs/*\n!.detdoc/runs/.gitkeep\n");
+    expect(await readFile(join(cwd, ".gitignore"), "utf8")).toBe("node_modules/\n.DS_Store\n.detdoc/runs/*\n!.detdoc/runs/.gitkeep\n.worktrees/\n");
   });
 
   it("does not overwrite an existing config", async () => {

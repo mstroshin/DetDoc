@@ -68,6 +68,16 @@ In a clean git repository, DetDoc creates an initial setup commit for DetDoc met
    - `y` applies the validated changes, creates `DetDoc apply <run-id>`, and leaves git clean.
    - `n` keeps the run saved under `.detdoc/runs/<run-id>/` without applying.
 
+At the final apply prompt, DetDoc leaves the implementation worktree available for inspection:
+
+```bash
+cd .worktrees/<run-id>
+git status
+git diff
+```
+
+After you answer `y` or `n`, DetDoc removes that worktree and its `<run-id>` branch. If the run fails before normal completion and `worktree.keepOnFailure` is true, the worktree is kept for debugging.
+
 Non-interactive shortcuts:
 
 ```bash
