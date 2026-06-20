@@ -1,6 +1,13 @@
+pub mod agent;
+pub mod artifacts;
 pub mod config;
+pub mod docs;
 pub mod error;
+pub mod events;
+pub mod flow;
 pub mod git;
+pub mod manifest;
 pub mod paths;
 pub mod plan;
+pub mod validation;
 pub mod worktree;
