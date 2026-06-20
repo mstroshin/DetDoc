@@ -3,6 +3,23 @@ mod fixtures;
 use detdoc_gui::detdoc::git::GitRepository;
 use detdoc_gui::detdoc::worktree::WorktreeManager;
 
+/// Verifies that status_porcelain returns non-ASCII file paths without
+/// octal/backslash escaping (i.e. core.quotepath=false is active).
+#[test]
+fn status_porcelain_non_ascii_path_is_not_escaped() {
+    let repo_dir = fixtures::init_repo();
+    std::fs::create_dir_all(repo_dir.path().join("docs")).unwrap();
+    std::fs::write(repo_dir.path().join("docs/résumé.md"), "# Résumé\n").unwrap();
+
+    let repo = GitRepository::new(repo_dir.path());
+    let status = repo.status_porcelain().unwrap();
+    assert!(
+        status.iter().any(|entry| entry.path == "docs/résumé.md"),
+        "expected path 'docs/résumé.md' but got: {:?}",
+        status.iter().map(|e| &e.path).collect::<Vec<_>>()
+    );
+}
+
 #[test]
 fn status_porcelain_parses_dirty_files() {
     let repo_dir = fixtures::init_repo();
