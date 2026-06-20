@@ -8,7 +8,7 @@ function isFinalEvent(event: FlowProgressEvent): boolean {
 }
 
 function isApprovalEvent(event: FlowProgressEvent): boolean {
-  return event.phase === "approve_plan";
+  return event.phase === "approve_plan" || event.phase === "approve_apply";
 }
 
 function createFallbackProgressReporter(io: CliIO): FlowProgressReporter {

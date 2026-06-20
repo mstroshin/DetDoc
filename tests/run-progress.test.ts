@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createRunProgressReporter } from "../src/cli/progress.js";
+import { createRunProgressController, createRunProgressReporter } from "../src/cli/progress.js";
 import { createTestIO } from "./helpers/test-io.js";
 
 describe("run progress reporter", () => {
@@ -28,5 +28,16 @@ describe("run progress reporter", () => {
     expect(io.stderrText()).toContain("◇ Removing run artifacts");
     expect(io.stderrText()).toContain("◇ Committing applied changes");
     expect(io.stderrText()).toContain("✓ Run complete");
+  });
+
+  it("prints apply approval as a prompt line instead of leaving a spinner running", () => {
+    const base = createTestIO();
+    const io = { ...base, isInteractive: true };
+    const progress = createRunProgressController(io);
+
+    progress.report({ phase: "plan", message: "Agent is planning code changes" });
+    progress.report({ phase: "approve_apply", message: "Waiting for apply approval" });
+
+    expect(base.stderrText()).toContain("◇ Waiting for apply approval");
   });
 });

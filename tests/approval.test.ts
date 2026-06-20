@@ -53,6 +53,28 @@ describe("TerminalApprovalUI", () => {
     expect(output).not.toContain('"targetFiles"');
   });
 
+  it("renders apply approval with explicit y/N instructions", async () => {
+    const io = createTestIO();
+    const approval = new TerminalApprovalUI({
+      ...io,
+      stdin: Readable.from(["n\n"]),
+      isInteractive: true,
+    });
+
+    await expect(
+      approval.approveApply({
+        runId: "20260620T001627Z-run-1ae174a1",
+        changedFiles: [".detdoc/config.yml", "Sources/App.swift"],
+      }),
+    ).resolves.toBe(false);
+
+    const plain = stripAnsi(io.stdoutText());
+    expect(plain).toContain("DetDoc validated changes");
+    expect(plain).toContain("Press y then Enter to apply these changes and create a git commit.");
+    expect(plain).toContain("Press Enter or n to keep this run saved without applying.");
+    expect(plain).toContain("Apply these validated changes and create a commit? [y/N]:");
+  });
+
   it("accepts y for plan approval", async () => {
     const io = createTestIO();
     const approval = new TerminalApprovalUI({

@@ -96,6 +96,9 @@ export class TerminalApprovalUI implements ApprovalUI {
           `${colors.bold("Run:")} ${context.runId}`,
           `${colors.bold("Validated changed files:")} ${colors.cyan(context.changedFiles.length)}`,
           ...context.changedFiles.map((file) => `${colors.cyan("-")} ${colors.cyan(file)}`),
+          "",
+          `${colors.bold("Next:")} Press y then Enter to apply these changes and create a git commit.`,
+          "      Press Enter or n to keep this run saved without applying.",
         ].join("\n"),
         {
           title: colors.bold(colors.cyan("DetDoc validated changes")),
@@ -106,7 +109,7 @@ export class TerminalApprovalUI implements ApprovalUI {
         },
       ),
     );
-    return this.confirm("Apply validated changes? [y/N]: ");
+    return this.confirm("Apply these validated changes and create a commit? [y/N]: ");
   }
 
   private async confirm(prompt: string): Promise<boolean> {
