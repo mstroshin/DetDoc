@@ -31,6 +31,22 @@ public struct ConfigStore: Sendable {
         }
     }
 
+    public func write(_ config: DetDocConfig, root: URL) throws {
+        let yaml: String
+        do {
+            yaml = try Yams.YAMLEncoder().encode(config)
+        } catch {
+            throw DetDocError("CONFIG_SERIALIZE_FAILED", "\(error)")
+        }
+        let path = configPath(root: root)
+        do {
+            try FileManager.default.createDirectory(at: path.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try yaml.write(to: path, atomically: true, encoding: .utf8)
+        } catch {
+            throw DetDocError("CONFIG_WRITE_FAILED", "\(error)")
+        }
+    }
+
     public func writeDefault(root: URL) throws {
         try writeIfMissing(configPath(root: root), try defaultConfigYAML())
     }
