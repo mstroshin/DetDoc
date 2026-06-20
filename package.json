@@ -13,6 +13,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "gui:dev": "tauri dev",
     "gui:build": "tauri build",
+    "gui:vite": "vite",
+    "gui:vite:build": "vite build",
     "gui:test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
     "gui:test:ui": "vitest run src-ui",
     "gui:typecheck": "tsc -p tsconfig.json --noEmit",

@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "identifier": "dev.detdoc.gui",
   "build": {
-    "beforeDevCommand": "npm run dev -- --watch=false",
-    "beforeBuildCommand": "npm run build",
+    "beforeDevCommand": "npm run gui:vite",
+    "beforeBuildCommand": "npm run gui:vite:build",
     "devUrl": "http://localhost:1420",
     "frontendDist": "../dist-ui"
   },
