@@ -1788,3 +1788,32 @@ git commit -m "test(core): green gate for DetDocCore foundation" --allow-empty
 - **Plan 2 — DetDocCore process/git/flow:** `GitRepository` (Process shell-out, TS git semantics), `WorktreeManager`, `DocsService`, `DocDiff`, `ValidationRunner`, `AgentRunner`+`FakeAgentRunner`, `DetDocEngine` (`AsyncThrowingStream<RunEvent>` + approval gates), `PiHealth`. Git-fixture + flow tests.
 - **Plan 3 — DetDocApp:** XcodeGen project, MVVM+C, `NavigationSplitView` + `.inspector`, docs explorer/editor (source+preview), run/fix panel, plan/patch review, runs, settings, onboarding.
 - **Plan 4 — PiAgentRunner:** pin the `pi --mode rpc` JSONL wire schema; real planning/implementation/repair.
+
+---
+
+## Post-implementation corrections (applied during execution)
+
+These supersede the corresponding text above; the implemented code reflects them.
+
+1. **Glob semantics (Task 6 + Reference Parity Facts) — corrected.** The Rust reference uses
+   `globset` with its default `literal_separator = false`, where **`*` and `?` match across `/`**
+   (verified empirically against `globset` 0.4 via `Glob::regex`). The earlier "Reference Parity
+   Facts" bullet wrongly described picomatch/TS semantics (`*` not crossing `/`). The shipped
+   `Glob.compile` therefore emits `*` → `.*` and `?` → `.` (not `[^/]*` / `[^/]`); `**/` →
+   `(?:.*/)?` and bare `**` → `.*` are unchanged. `GlobTests` assert the globset behavior
+   (`*.md` matches `docs/a.md`; `.env.*` matches `.env.config/leaked`; `secrets/*` matches
+   `secrets/sub/key`; `a?c` matches `a/c`). This keeps `PathPolicy` fail-closed and at parity
+   with the Rust deny/doc checks.
+2. **Package.swift (Task 1) — `swift-tools-version` is `6.4`, not `6.0`** (`.macOS(.v27)` requires
+   PackageDescription 6.4+). The `DetDocCore` target carries
+   `swiftSettings: [.treatAllWarnings(as: .error)]` as the warnings gate.
+3. **Warnings gate (Task 14 Step 2) — corrected.** `swift build -Xswiftc -warnings-as-errors` is
+   unrunnable here: the global flag conflicts with the `-suppress-warnings` SwiftPM applies to the
+   Yams dependency. The gate is instead the per-target `treatAllWarnings(as: .error)` above, plus
+   `swift test`. (To spot-check warnings ad hoc: `swift package clean && swift build 2>&1 | grep -i 'warning:'`.)
+4. **Test filtering note.** Swift Testing's `swift test --filter <X>` matches `@Test` function /
+   `@Suite` names, not file/struct names, so the per-task `--filter <TestsFileName>` commands print
+   "no matching tests". RED is confirmed by the build error; GREEN by a full `swift test`.
+
+Final state: full suite **42 tests green**, clean warnings-gated build, final whole-branch review
+clean after the C1 fix.
