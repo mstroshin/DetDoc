@@ -49,3 +49,21 @@ fn approved_targets_are_unique_and_sorted() {
     };
     assert_eq!(approved_targets_from_plan(&plan), vec!["src/a.ts", "src/b.ts"]);
 }
+
+#[test]
+fn plan_change_must_have_at_least_one_target_file() {
+    let config = default_config();
+    let plan = ProposedPlan {
+        summary: "Change app behavior".to_string(),
+        changes: vec![PlanChange {
+            reason: "doc-diff:docs/spec.md:L1-L2".to_string(),
+            target_files: vec![],
+            kind: "modify".to_string(),
+            rationale: "The docs require this code change.".to_string(),
+        }],
+        questions: vec![],
+        risk: "low".to_string(),
+    };
+    let error = validate_proposed_plan(plan, &config, RunMode::Run).unwrap_err();
+    assert_eq!(error.code(), "PLAN_CHANGE_NO_TARGETS");
+}

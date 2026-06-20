@@ -42,6 +42,9 @@ pub fn validate_proposed_plan(plan: ProposedPlan, config: &DetDocConfig, mode: R
         if !matches!(change.kind.as_str(), "create" | "modify" | "delete" | "rename") {
             return Err(DetDocError::new("PLAN_KIND_INVALID", format!("Invalid change kind: {}", change.kind)));
         }
+        if change.target_files.is_empty() {
+            return Err(DetDocError::new("PLAN_CHANGE_NO_TARGETS", "plan change must list at least one target file"));
+        }
         match mode {
             RunMode::Run if !change.reason.starts_with("doc-diff:") => {
                 return Err(DetDocError::new("PLAN_REASON_INVALID", format!("run plan change must use doc-diff reason: {}", change.reason)));
