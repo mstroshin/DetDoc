@@ -15,7 +15,8 @@
     "gui:build": "tauri build",
     "gui:test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
     "gui:test:ui": "vitest run src-ui",
-    "gui:typecheck": "tsc -p tsconfig.json --noEmit"
+    "gui:typecheck": "tsc -p tsconfig.json --noEmit",
+    "gui:typecheck:ui": "tsc -p tsconfig.ui.json"
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "latest",
@@ -34,6 +35,8 @@
     "ora": "^9.4.0",
     "picocolors": "^1.1.1",
     "picomatch": "^4.0.3",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "tailwind-merge": "^2.6.0",
     "typebox": "^1.0.58",
     "yaml": "^2.8.1",
