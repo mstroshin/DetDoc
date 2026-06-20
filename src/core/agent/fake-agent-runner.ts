@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type { AgentRunner, ImplementRequest, PlanRequest } from "./agent-runner.js";
+import type { AgentPlanResult, AgentRunResult, AgentRunner, ImplementRequest, PlanRequest } from "./agent-runner.js";
+import { zeroTokenUsage } from "./agent-runner.js";
 import type { ProposedPlan } from "../plan.js";
 
 export class FakeAgentRunner implements AgentRunner {
@@ -11,11 +12,11 @@ export class FakeAgentRunner implements AgentRunner {
     },
   ) {}
 
-  async plan(_request: PlanRequest): Promise<ProposedPlan> {
-    return this.options.plan;
+  async plan(_request: PlanRequest): Promise<AgentPlanResult> {
+    return { plan: this.options.plan, usage: zeroTokenUsage() };
   }
 
-  async implement(request: ImplementRequest): Promise<void> {
+  async implement(request: ImplementRequest): Promise<AgentRunResult> {
     for (const [relativePath, content] of Object.entries(this.options.writes ?? {})) {
       if (!request.approvedTargets.includes(relativePath)) {
         throw new Error(`FakeAgentRunner attempted unapproved write: ${relativePath}`);
@@ -25,5 +26,6 @@ export class FakeAgentRunner implements AgentRunner {
       await mkdir(dirname(absolute), { recursive: true });
       await writeFile(absolute, content, "utf8");
     }
+    return { usage: zeroTokenUsage() };
   }
 }

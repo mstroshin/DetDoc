@@ -5,7 +5,8 @@ import YAML from "yaml";
 import { AutoApprovalUI, type ApprovalUI } from "../src/core/approval.js";
 import { defaultConfig, initConfig } from "../src/core/config.js";
 import { FakeAgentRunner } from "../src/core/agent/fake-agent-runner.js";
-import type { AgentRunner, ImplementRequest, PlanRequest } from "../src/core/agent/agent-runner.js";
+import type { AgentRunner, ImplementRequest, PlanRequest, RepairValidationRequest } from "../src/core/agent/agent-runner.js";
+import { zeroTokenUsage } from "../src/core/agent/agent-runner.js";
 import { runDocFlow, runFixFlow } from "../src/core/flow.js";
 import { cleanupFixtures, createGitFixture } from "./helpers/git-fixture.js";
 
@@ -154,29 +155,34 @@ describe("DetDoc flows", () => {
 
       async plan(_request: PlanRequest) {
         return {
-          summary: "Update app value",
-          changes: [
-            {
-              reason: "doc-diff:docs/spec.md:L1-L1",
-              targetFiles: ["src/app.ts"],
-              kind: "modify" as const,
-              rationale: "The changed documentation requires value 2.",
-            },
-          ],
-          questions: [],
-          risk: "low" as const,
+          plan: {
+            summary: "Update app value",
+            changes: [
+              {
+                reason: "doc-diff:docs/spec.md:L1-L1",
+                targetFiles: ["src/app.ts"],
+                kind: "modify" as const,
+                rationale: "The changed documentation requires value 2.",
+              },
+            ],
+            questions: [],
+            risk: "low" as const,
+          },
+          usage: zeroTokenUsage(),
         };
       }
 
-      async implement(request: ImplementRequest): Promise<void> {
+      async implement(request: ImplementRequest) {
         await writeFile(join(request.cwd, "src/app.ts"), "export const value = 999;\n", "utf8");
+        return { usage: zeroTokenUsage() };
       }
 
-      async repairValidation(request: ImplementRequest & { validationLog: string; attempt: number }): Promise<void> {
+      async repairValidation(request: RepairValidationRequest) {
         this.repairAttempts += 1;
         expect(request.validationLog).toContain("Validation command failed: Check generated value");
         expect(request.attempt).toBe(1);
         await writeFile(join(request.cwd, "src/app.ts"), "export const value = 2;\n", "utf8");
+        return { usage: zeroTokenUsage() };
       }
     }
     const agent = new RepairingAgent();
@@ -198,22 +204,26 @@ describe("DetDoc flows", () => {
     const agent: AgentRunner = {
       async plan(_request: PlanRequest) {
         return {
-          summary: "Update app value",
-          changes: [
-            {
-              reason: "doc-diff:docs/spec.md:L1-L1",
-              targetFiles: ["src/app.ts"],
-              kind: "modify" as const,
-              rationale: "Only src/app.ts is approved.",
-            },
-          ],
-          questions: [],
-          risk: "low" as const,
+          plan: {
+            summary: "Update app value",
+            changes: [
+              {
+                reason: "doc-diff:docs/spec.md:L1-L1",
+                targetFiles: ["src/app.ts"],
+                kind: "modify" as const,
+                rationale: "Only src/app.ts is approved.",
+              },
+            ],
+            questions: [],
+            risk: "low" as const,
+          },
+          usage: zeroTokenUsage(),
         };
       },
-      async implement(request: ImplementRequest): Promise<void> {
+      async implement(request: ImplementRequest) {
         await writeFile(join(request.cwd, "src/app.ts"), "export const value = 2;\n", "utf8");
         await writeFile(join(request.cwd, "unapproved.txt"), "must not merge\n", "utf8");
+        return { usage: zeroTokenUsage() };
       },
     };
     const progress: string[] = [];

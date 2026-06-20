@@ -18,7 +18,7 @@ The core flow is:
 detdoc init
 detdoc diff
 detdoc plan
-detdoc run [--auto-approve] [--auto-apply]
+detdoc run [--auto-approve] [--auto-apply] [--show-token-usage]
 detdoc fix "message to fix"
 detdoc apply <run-id>
 detdoc replay <run-id>
@@ -76,6 +76,14 @@ detdoc run --auto-approve --auto-apply # approve, apply, commit, and leave git c
 ```
 
 `--auto-approve` and `--auto-apply` are separate on purpose. Approving a plan does not automatically apply code unless `--auto-apply` is also present.
+
+To inspect pi token usage for a run, add:
+
+```bash
+detdoc run --show-token-usage
+```
+
+The token usage summary is printed after the run result. `detdoc apply` does not expose this flag because applying a saved patch does not call pi.
 
 ## Bugfix workflow
 

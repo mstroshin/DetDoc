@@ -21,6 +21,37 @@ export type AgentImplementationProgressEvent =
 
 export type AgentImplementationProgressReporter = (event: AgentImplementationProgressEvent) => void;
 
+export interface TokenUsage {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  total: number;
+}
+
+export interface AgentPlanResult {
+  plan: ProposedPlan;
+  usage: TokenUsage;
+}
+
+export interface AgentRunResult {
+  usage: TokenUsage;
+}
+
+export function zeroTokenUsage(): TokenUsage {
+  return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 };
+}
+
+export function addTokenUsage(left: TokenUsage, right: TokenUsage): TokenUsage {
+  return {
+    input: left.input + right.input,
+    output: left.output + right.output,
+    cacheRead: left.cacheRead + right.cacheRead,
+    cacheWrite: left.cacheWrite + right.cacheWrite,
+    total: left.total + right.total,
+  };
+}
+
 export interface ImplementRequest {
   mode: RunMode;
   input: string;
@@ -37,7 +68,7 @@ export interface RepairValidationRequest extends ImplementRequest {
 }
 
 export interface AgentRunner {
-  plan(request: PlanRequest): Promise<ProposedPlan>;
-  implement(request: ImplementRequest): Promise<void>;
-  repairValidation?(request: RepairValidationRequest): Promise<void>;
+  plan(request: PlanRequest): Promise<AgentPlanResult>;
+  implement(request: ImplementRequest): Promise<AgentRunResult>;
+  repairValidation?(request: RepairValidationRequest): Promise<AgentRunResult>;
 }

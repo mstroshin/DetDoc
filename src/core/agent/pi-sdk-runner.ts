@@ -11,10 +11,45 @@ import {
   type ExtensionFactory,
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import type { AgentRunner, ImplementRequest, PlanRequest, RepairValidationRequest } from "./agent-runner.js";
+import {
+  addTokenUsage,
+  zeroTokenUsage,
+  type AgentPlanResult,
+  type AgentRunner,
+  type AgentRunResult,
+  type ImplementRequest,
+  type PlanRequest,
+  type RepairValidationRequest,
+  type TokenUsage,
+} from "./agent-runner.js";
 import type { DetDocConfig } from "../config.js";
 import { isDeniedPath, isDocPath } from "../paths.js";
 import { PlanSchema, type ProposedPlan, validateProposedPlan } from "../plan.js";
+
+function numberField(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function usageFromMessage(message: { role?: string; usage?: unknown }): TokenUsage {
+  if (message.role !== "assistant" || !message.usage || typeof message.usage !== "object") return zeroTokenUsage();
+  const usage = message.usage as { input?: unknown; output?: unknown; cacheRead?: unknown; cacheWrite?: unknown; totalTokens?: unknown; total?: unknown };
+  const input = numberField(usage.input);
+  const output = numberField(usage.output);
+  const cacheRead = numberField(usage.cacheRead);
+  const cacheWrite = numberField(usage.cacheWrite);
+  const explicitTotal = numberField(usage.totalTokens) || numberField(usage.total);
+  return {
+    input,
+    output,
+    cacheRead,
+    cacheWrite,
+    total: explicitTotal || input + output + cacheRead + cacheWrite,
+  };
+}
+
+export function extractSessionTokenUsage(messages: Array<{ role?: string; usage?: unknown }>): TokenUsage {
+  return messages.reduce((total, message) => addTokenUsage(total, usageFromMessage(message)), zeroTokenUsage());
+}
 
 function extractLastAssistantText(messages: Array<{ role?: string; content?: unknown }>): string {
   for (const message of [...messages].reverse()) {
@@ -173,7 +208,7 @@ function guardExtension(request: ImplementRequest): ExtensionFactory {
 }
 
 export class PiSdkRunner implements AgentRunner {
-  async plan(request: PlanRequest): Promise<ProposedPlan> {
+  async plan(request: PlanRequest): Promise<AgentPlanResult> {
     let capturedPlan: ProposedPlan | undefined;
     const submitPlan = defineTool({
       name: "submit_plan",
@@ -221,16 +256,17 @@ export class PiSdkRunner implements AgentRunner {
 
     try {
       await session.prompt(buildPlanningPrompt(request));
-      if (capturedPlan) return validateProposedPlan(capturedPlan, { config: request.config, mode: request.mode });
+      const usage = extractSessionTokenUsage(session.messages as Array<{ role?: string; usage?: unknown }>);
+      if (capturedPlan) return { plan: validateProposedPlan(capturedPlan, { config: request.config, mode: request.mode }), usage };
 
       const text = extractLastAssistantText(session.messages as Array<{ role?: string; content?: unknown }>);
-      return validateProposedPlan(JSON.parse(text), { config: request.config, mode: request.mode });
+      return { plan: validateProposedPlan(JSON.parse(text), { config: request.config, mode: request.mode }), usage };
     } finally {
       session.dispose();
     }
   }
 
-  private async runImplementationPrompt(request: ImplementRequest, prompt: string): Promise<void> {
+  private async runImplementationPrompt(request: ImplementRequest, prompt: string): Promise<AgentRunResult> {
     const loader = new DefaultResourceLoader({
       cwd: request.cwd,
       agentDir: getAgentDir(),
@@ -253,17 +289,18 @@ export class PiSdkRunner implements AgentRunner {
 
     try {
       await session.prompt(prompt);
+      return { usage: extractSessionTokenUsage(session.messages as Array<{ role?: string; usage?: unknown }>) };
     } finally {
       session.dispose();
     }
   }
 
-  async implement(request: ImplementRequest): Promise<void> {
-    await this.runImplementationPrompt(request, buildImplementationPrompt(request));
+  async implement(request: ImplementRequest): Promise<AgentRunResult> {
+    return this.runImplementationPrompt(request, buildImplementationPrompt(request));
   }
 
-  async repairValidation(request: RepairValidationRequest): Promise<void> {
-    await this.runImplementationPrompt(request, buildValidationRepairPrompt(request));
+  async repairValidation(request: RepairValidationRequest): Promise<AgentRunResult> {
+    return this.runImplementationPrompt(request, buildValidationRepairPrompt(request));
   }
 }
 

@@ -1,5 +1,5 @@
 import YAML from "yaml";
-import type { AgentImplementationProgressEvent, AgentRunner } from "./agent/agent-runner.js";
+import { addTokenUsage, zeroTokenUsage, type AgentImplementationProgressEvent, type AgentRunner, type TokenUsage } from "./agent/agent-runner.js";
 import type { ApplyApprovalContext, ApprovalUI } from "./approval.js";
 import { ArtifactStore } from "./artifacts.js";
 import { ensureManagedGitignoreEntries, loadConfig } from "./config.js";
@@ -16,6 +16,23 @@ export interface FlowResult {
   runId: string;
   applied: boolean;
   patch: string;
+  tokenUsage: FlowTokenUsage;
+}
+
+export interface FlowTokenUsage {
+  plan: TokenUsage;
+  implement: TokenUsage;
+  repairValidation: TokenUsage;
+  total: TokenUsage;
+}
+
+function zeroFlowTokenUsage(): FlowTokenUsage {
+  return {
+    plan: zeroTokenUsage(),
+    implement: zeroTokenUsage(),
+    repairValidation: zeroTokenUsage(),
+    total: zeroTokenUsage(),
+  };
 }
 
 export type FlowProgressPhase =
@@ -142,7 +159,8 @@ export async function createPlanFlow(input: {
   await store.writeText(manifest.runId, mode === "run" ? "input.diff.md" : "intent.md", taskInput);
   await store.writeText(manifest.runId, "config.snapshot.yml", YAML.stringify(config));
 
-  const plan = validateProposedPlan(await input.agent.plan({ mode, input: taskInput, config, cwd }), { config, mode });
+  const planResult = await input.agent.plan({ mode, input: taskInput, config, cwd });
+  const plan = validateProposedPlan(planResult.plan, { config, mode });
   await store.writeJson(manifest.runId, "plan.proposed.json", plan);
   return { runId: manifest.runId };
 }
@@ -156,6 +174,11 @@ async function runFlow(input: {
   progress?: FlowProgressReporter;
 }): Promise<FlowResult> {
   const cwd = input.cwd;
+  const tokenUsage = zeroFlowTokenUsage();
+  const recordUsage = (phase: keyof Omit<FlowTokenUsage, "total">, usage: TokenUsage): void => {
+    tokenUsage[phase] = addTokenUsage(tokenUsage[phase], usage);
+    tokenUsage.total = addTokenUsage(tokenUsage.total, usage);
+  };
   progress(input, { phase: "load_config", message: "Loading DetDoc config" });
   const config = await loadConfig(cwd);
   const mainRepo = new GitRepository(cwd);
@@ -185,10 +208,9 @@ async function runFlow(input: {
     }
 
     progress(input, { phase: "plan", message: "Agent is planning code changes", runId: manifest.runId });
-    const proposedPlan = validateProposedPlan(
-      await input.agent.plan({ mode: input.mode, input: taskInput, config, cwd: worktree.path }),
-      { config, mode: input.mode },
-    );
+    const planResult = await input.agent.plan({ mode: input.mode, input: taskInput, config, cwd: worktree.path });
+    recordUsage("plan", planResult.usage);
+    const proposedPlan = validateProposedPlan(planResult.plan, { config, mode: input.mode });
     await store.writeJson(manifest.runId, "plan.proposed.json", proposedPlan);
 
     progress(input, { phase: "approve_plan", message: "Waiting for plan approval", runId: manifest.runId });
@@ -202,7 +224,7 @@ async function runFlow(input: {
     await updateManifest(store, manifest);
 
     progress(input, { phase: "implement", message: "Agent is editing approved files", runId: manifest.runId });
-    await input.agent.implement({
+    const implementResult = await input.agent.implement({
       mode: input.mode,
       input: taskInput,
       config,
@@ -211,6 +233,7 @@ async function runFlow(input: {
       approvedTargets,
       progress: (event) => progress(input, { phase: "implement", message: agentActionMessage(event), runId: manifest.runId }),
     });
+    recordUsage("implement", implementResult.usage);
 
     let patch = "";
     let validation: Awaited<ReturnType<typeof validatePatch>> | undefined;
@@ -232,7 +255,7 @@ async function runFlow(input: {
         const validationFailureLog = error.message;
         await store.writeText(manifest.runId, `validation-failure-${attempt}.log`, validationFailureLog);
         progress(input, { phase: "repair_validation", message: `Agent is fixing validation failure (${attempt}/${maxValidationRepairAttempts})`, runId: manifest.runId });
-        await repairValidation.call(input.agent, {
+        const repairResult = await repairValidation.call(input.agent, {
           mode: input.mode,
           input: taskInput,
           config: worktreeConfig,
@@ -243,6 +266,7 @@ async function runFlow(input: {
           attempt,
           progress: (event) => progress(input, { phase: "repair_validation", message: agentActionMessage(event), runId: manifest.runId }),
         });
+        recordUsage("repairValidation", repairResult.usage);
       }
     }
 
@@ -261,7 +285,7 @@ async function runFlow(input: {
     if (!(await approveApply(input, { runId: manifest.runId, changedFiles: validation.changedFiles }))) {
       keepWorktree = false;
       completed = true;
-      return { runId: manifest.runId, applied: false, patch };
+      return { runId: manifest.runId, applied: false, patch, tokenUsage };
     }
 
     await mergeValidatedWorktreePatch(input, mainRepo, patch, manifest.runId);
@@ -270,7 +294,7 @@ async function runFlow(input: {
     await deleteRunArtifacts(input, store, manifest.runId);
     await commitAppliedChanges(input, mainRepo, manifest.runId);
     completed = true;
-    return { runId: manifest.runId, applied: true, patch };
+    return { runId: manifest.runId, applied: true, patch, tokenUsage };
   } finally {
     if (!keepWorktree) {
       progress(input, { phase: "cleanup_worktree", message: "Cleaning up isolated worktree", runId: manifest.runId });
@@ -312,7 +336,7 @@ export async function applyRun(input: { cwd: string; runId: string; progress?: F
   await deleteRunArtifacts(input, store, input.runId);
   await commitAppliedChanges(input, repo, input.runId);
   progress(input, { phase: "done", message: "Apply complete", runId: input.runId });
-  return { runId: input.runId, applied: true, patch };
+  return { runId: input.runId, applied: true, patch, tokenUsage: zeroFlowTokenUsage() };
 }
 
 export async function replayRun(input: { cwd: string; runId: string }): Promise<FlowResult> {
@@ -337,5 +361,5 @@ export async function replayRun(input: { cwd: string; runId: string }): Promise<
   await repo.applyPatch(patch);
   const validationLog = await runValidationCommands({ cwd: input.cwd, config });
   await store.writeText(input.runId, "replay.log", validationLog);
-  return { runId: input.runId, applied: true, patch };
+  return { runId: input.runId, applied: true, patch, tokenUsage: zeroFlowTokenUsage() };
 }

@@ -107,7 +107,8 @@ describe("FakeAgentRunner", () => {
       },
     });
 
-    const plan = await runner.plan({ mode: "fix", input: "fix bug", config: defaultConfig(), cwd: "/tmp/project" });
-    expect(plan.summary).toBe("Fake plan");
+    const result = await runner.plan({ mode: "fix", input: "fix bug", config: defaultConfig(), cwd: "/tmp/project" });
+    expect(result.plan.summary).toBe("Fake plan");
+    expect(result.usage.total).toBe(0);
   });
 });

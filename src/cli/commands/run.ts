@@ -5,7 +5,7 @@ import type { AgentRunner } from "../../core/agent/agent-runner.js";
 import { FakeAgentRunner } from "../../core/agent/fake-agent-runner.js";
 import { createDefaultAgentRunner } from "../../core/agent/pi-sdk-runner.js";
 import { TerminalApprovalUI, type ApplyApprovalContext } from "../../core/approval.js";
-import { runDocFlow, type FlowProgressReporter } from "../../core/flow.js";
+import { runDocFlow, type FlowProgressReporter, type FlowTokenUsage } from "../../core/flow.js";
 import { createRunProgressController } from "../progress.js";
 
 function agentFromEnv(fake: FakeAgentRunner): AgentRunner {
@@ -31,6 +31,22 @@ function progressFromOptions(report: FlowProgressReporter, options: RunOptions):
 interface RunOptions {
   autoApprove?: boolean;
   autoApply?: boolean;
+  showTokenUsage?: boolean;
+}
+
+function formatNumber(value: number): string {
+  return new Intl.NumberFormat("en-US").format(value);
+}
+
+function formatTokenUsageLine(label: string, usage: FlowTokenUsage[keyof FlowTokenUsage]): string {
+  return `  ${label}: input ${formatNumber(usage.input)}, output ${formatNumber(usage.output)}, cache read ${formatNumber(usage.cacheRead)}, cache write ${formatNumber(usage.cacheWrite)}, total ${formatNumber(usage.total)}`;
+}
+
+export function formatTokenUsageSummary(usage: FlowTokenUsage): string[] {
+  const lines = ["Token usage:", formatTokenUsageLine("plan", usage.plan), formatTokenUsageLine("implement", usage.implement)];
+  if (usage.repairValidation.total > 0) lines.push(formatTokenUsageLine("repair validation", usage.repairValidation));
+  lines.push(formatTokenUsageLine("total", usage.total));
+  return lines;
 }
 
 export function registerRunCommand(program: Command, io: CliIO): void {
@@ -39,6 +55,7 @@ export function registerRunCommand(program: Command, io: CliIO): void {
     .description("Run the documentation-diff workflow")
     .option("--auto-approve", "approve the proposed plan without prompting")
     .option("--auto-apply", "apply generated changes without prompting")
+    .option("--show-token-usage", "print final token usage summary")
     .action(async (options: RunOptions) => {
       const agent = new FakeAgentRunner({
         plan: {
@@ -61,6 +78,9 @@ export function registerRunCommand(program: Command, io: CliIO): void {
         const approval = approvalFromOptions(io, options);
         const result = await runDocFlow({ cwd: process.cwd(), agent: agentFromEnv(agent), approval, progress: progressFromOptions(progress.report, options) });
         writeLine(io.stdout, `Run ${result.runId} ${result.applied ? "applied" : "saved"}`);
+        if (options.showTokenUsage) {
+          for (const line of formatTokenUsageSummary(result.tokenUsage)) writeLine(io.stdout, line);
+        }
       } catch (error) {
         progress.fail();
         throw error;
