@@ -8,6 +8,7 @@ pub mod flow;
 pub mod git;
 pub mod manifest;
 pub mod paths;
+pub mod pi_rpc;
 pub mod plan;
 pub mod validation;
 pub mod worktree;

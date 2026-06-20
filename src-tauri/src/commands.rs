@@ -1,6 +1,5 @@
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use serde::Serialize;
 
@@ -116,5 +115,5 @@ pub async fn apply_saved_run_command(root: String, run_id: String, auto_commit: 
 
 #[tauri::command]
 pub async fn pi_health_check() -> Result<bool, String> {
-    Ok(Command::new("pi").arg("--version").output().map(|output| output.status.success()).unwrap_or(false))
+    Ok(crate::detdoc::pi_rpc::check_pi_available())
 }
