@@ -57,6 +57,7 @@ describe("DetDoc flows", () => {
       "approve_apply",
       "merge_worktree",
       "cleanup_run",
+      "commit",
       "cleanup_worktree",
       "done",
     ]);
@@ -64,6 +65,9 @@ describe("DetDoc flows", () => {
     expect(await readFile(join(fixture.cwd, "src/app.ts"), "utf8")).toBe("export const value = 2;\n");
     expect(result.runId).toMatch(/-run-/);
     await expect(access(join(fixture.cwd, ".detdoc", "runs", result.runId))).rejects.toThrow();
+    await expect(fixture.git(["status", "--short"])).resolves.toMatchObject({ stdout: "" });
+    await expect(fixture.git(["log", "-1", "--pretty=%s"])).resolves.toMatchObject({ stdout: `DetDoc apply ${result.runId}\n` });
+    await expect(fixture.git(["show", "--name-only", "--format=", "HEAD"])).resolves.not.toMatchObject({ stdout: expect.stringContaining(".detdoc/runs/") });
   });
 
   it("saves a validated run without applying when apply approval is rejected", async () => {

@@ -15,6 +15,7 @@ describe("run progress reporter", () => {
     progress({ phase: "merge_worktree", message: "Merging validated worktree changes into main" });
     progress({ phase: "post_apply_validation", message: "Running validation commands in main worktree" });
     progress({ phase: "cleanup_run", message: "Removing run artifacts" });
+    progress({ phase: "commit", message: "Committing applied changes" });
     progress({ phase: "done", message: "Run complete" });
 
     expect(io.stderrText()).toContain("◇ Collecting documentation changes");
@@ -25,6 +26,7 @@ describe("run progress reporter", () => {
     expect(io.stderrText()).toContain("◇ Merging validated worktree changes into main");
     expect(io.stderrText()).toContain("◇ Running validation commands in main worktree");
     expect(io.stderrText()).toContain("◇ Removing run artifacts");
+    expect(io.stderrText()).toContain("◇ Committing applied changes");
     expect(io.stderrText()).toContain("✓ Run complete");
   });
 });

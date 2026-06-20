@@ -2,7 +2,7 @@ import YAML from "yaml";
 import type { AgentImplementationProgressEvent, AgentRunner } from "./agent/agent-runner.js";
 import type { ApplyApprovalContext, ApprovalUI } from "./approval.js";
 import { ArtifactStore } from "./artifacts.js";
-import { loadConfig } from "./config.js";
+import { ensureManagedGitignoreEntries, loadConfig } from "./config.js";
 import { getNormalizedDocDiff } from "./diff.js";
 import { DetDocError } from "./errors.js";
 import { GitRepository } from "./git.js";
@@ -35,6 +35,7 @@ export type FlowProgressPhase =
   | "apply_patch"
   | "post_apply_validation"
   | "cleanup_run"
+  | "commit"
   | "cleanup_worktree"
   | "done";
 
@@ -91,6 +92,20 @@ async function applyPatchToMain(repo: GitRepository, patch: string): Promise<voi
 async function deleteRunArtifacts(input: { progress?: FlowProgressReporter }, store: ArtifactStore, runId: string): Promise<void> {
   progress(input, { phase: "cleanup_run", message: "Removing run artifacts", runId });
   await store.deleteRun(runId);
+}
+
+async function commitAppliedChanges(input: { progress?: FlowProgressReporter }, repo: GitRepository, runId: string): Promise<void> {
+  progress(input, { phase: "commit", message: "Committing applied changes", runId });
+  await ensureManagedGitignoreEntries(repo.cwd);
+  await repo.git(["add", "-A", "--", "."]);
+  await repo.git(["commit", "-m", `DetDoc apply ${runId}`]);
+  const dirty = await repo.statusPorcelain();
+  if (dirty.length > 0) {
+    throw new DetDocError(
+      `Git working tree is not clean after DetDoc apply: ${dirty.map((file) => `${file.status} ${file.path}`).join(", ")}`,
+      "GIT_NOT_CLEAN_AFTER_APPLY",
+    );
+  }
 }
 
 async function collectPatchForTargets(repo: GitRepository, approvedTargets: string[]): Promise<string> {
@@ -253,6 +268,7 @@ async function runFlow(input: {
     keepWorktree = false;
     await runPostApplyValidation(input, store, manifest.runId);
     await deleteRunArtifacts(input, store, manifest.runId);
+    await commitAppliedChanges(input, mainRepo, manifest.runId);
     completed = true;
     return { runId: manifest.runId, applied: true, patch };
   } finally {
@@ -293,6 +309,7 @@ export async function applyRun(input: { cwd: string; runId: string; progress?: F
   await repo.applyPatch(patch);
   await runPostApplyValidation(input, store, input.runId);
   await deleteRunArtifacts(input, store, input.runId);
+  await commitAppliedChanges(input, repo, input.runId);
   return { runId: input.runId, applied: true, patch };
 }
 

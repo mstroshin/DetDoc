@@ -280,6 +280,8 @@ async function createInitialCommit(cwd: string, files: string[]): Promise<boolea
   return true;
 }
 
+const managedGitignoreEntries = [".DS_Store", ".detdoc/runs/*", "!.detdoc/runs/.gitkeep"];
+
 async function ensureGitignoreEntry(cwd: string, entry: string): Promise<boolean> {
   const path = join(cwd, ".gitignore");
   if (!(await exists(path))) {
@@ -294,6 +296,14 @@ async function ensureGitignoreEntry(cwd: string, entry: string): Promise<boolean
   const separator = current.length === 0 || current.endsWith("\n") ? "" : "\n";
   await writeFile(path, `${current}${separator}${entry}\n`, "utf8");
   return true;
+}
+
+export async function ensureManagedGitignoreEntries(cwd: string): Promise<string[]> {
+  const added: string[] = [];
+  for (const entry of managedGitignoreEntries) {
+    if (await ensureGitignoreEntry(cwd, entry)) added.push(entry);
+  }
+  return added;
 }
 
 export async function initStarterDocs(cwd: string): Promise<string[]> {
@@ -323,7 +333,7 @@ export async function initConfig(cwd: string): Promise<{ created: boolean; path:
   if (await writeIfMissing(join(cwd, ".detdoc", "runs", ".gitkeep"), "")) {
     generatedFiles.push(".detdoc/runs/.gitkeep");
   }
-  if (await ensureGitignoreEntry(cwd, ".DS_Store")) {
+  if ((await ensureManagedGitignoreEntries(cwd)).length > 0) {
     generatedFiles.push(".gitignore");
   }
   const docsCreated = await initStarterDocs(cwd);

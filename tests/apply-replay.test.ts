@@ -47,6 +47,8 @@ describe("apply and replay", () => {
     expect(applied.applied).toBe(true);
     expect(await readFile(join(fixture.cwd, "src", "app.ts"), "utf8")).toBe("export const value = 2;\n");
     await expect(access(join(fixture.cwd, ".detdoc", "runs", runId))).rejects.toThrow();
+    await expect(fixture.git(["status", "--short"])).resolves.toMatchObject({ stdout: "" });
+    await expect(fixture.git(["log", "-1", "--pretty=%s"])).resolves.toMatchObject({ stdout: `DetDoc apply ${runId}\n` });
   });
 
   it("replays a saved patch on matching preimage without deleting the run artifacts", async () => {
