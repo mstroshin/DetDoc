@@ -71,7 +71,7 @@ describe("TerminalApprovalUI", () => {
     const plain = stripAnsi(io.stdoutText());
     expect(plain).toContain("DetDoc validated changes");
     expect(plain).toContain("Press y then Enter to apply these changes and create a git commit.");
-    expect(plain).toContain("Press Enter or n to keep this run saved without applying.");
+    expect(plain).toContain("Press n then Enter to keep this run saved without applying.");
     expect(plain).toContain("Apply these validated changes and create a commit? [y/N]:");
   });
 

@@ -98,7 +98,7 @@ export class TerminalApprovalUI implements ApprovalUI {
           ...context.changedFiles.map((file) => `${colors.cyan("-")} ${colors.cyan(file)}`),
           "",
           `${colors.bold("Next:")} Press y then Enter to apply these changes and create a git commit.`,
-          "      Press Enter or n to keep this run saved without applying.",
+          "      Press n then Enter to keep this run saved without applying.",
         ].join("\n"),
         {
           title: colors.bold(colors.cyan("DetDoc validated changes")),
