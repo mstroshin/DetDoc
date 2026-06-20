@@ -5,8 +5,8 @@ public actor DetDocEngine {
     private let agent: any AgentRunner
     private let maxRepairAttempts = 2
 
-    private var pendingPlan: CheckedContinuation<PlanDecision, Never>?
-    private var pendingApply: CheckedContinuation<ApplyDecision, Never>?
+    private var pendingPlan: CheckedContinuation<PlanDecision, Error>?
+    private var pendingApply: CheckedContinuation<ApplyDecision, Error>?
 
     public init(root: URL, agent: any AgentRunner) {
         self.root = root
@@ -23,12 +23,37 @@ public actor DetDocEngine {
         pendingApply = nil
     }
 
-    private func awaitPlanDecision() async -> PlanDecision {
-        await withCheckedContinuation { pendingPlan = $0 }
+    /// Suspends at the plan-approval gate until a decision is submitted, or fails with
+    /// `CancellationError` if the surrounding Task is cancelled. Without cancellation
+    /// awareness a cancelled flow would suspend here forever and orphan its worktree.
+    private func awaitPlanDecision() async throws -> PlanDecision {
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (c: CheckedContinuation<PlanDecision, Error>) in
+                self.pendingPlan = c
+            }
+        } onCancel: {
+            Task { await self.failPendingPlan() }
+        }
     }
 
-    private func awaitApplyDecision() async -> ApplyDecision {
-        await withCheckedContinuation { pendingApply = $0 }
+    private func awaitApplyDecision() async throws -> ApplyDecision {
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (c: CheckedContinuation<ApplyDecision, Error>) in
+                self.pendingApply = c
+            }
+        } onCancel: {
+            Task { await self.failPendingApply() }
+        }
+    }
+
+    private func failPendingPlan() {
+        pendingPlan?.resume(throwing: CancellationError())
+        pendingPlan = nil
+    }
+
+    private func failPendingApply() {
+        pendingApply?.resume(throwing: CancellationError())
+        pendingApply = nil
     }
 
     public func start(mode: RunMode, message: String? = nil) -> AsyncThrowingStream<RunEvent, Error> {
@@ -43,6 +68,10 @@ public actor DetDocEngine {
                 } catch let error as DetDocError {
                     continuation.yield(.error(error))
                     continuation.finish(throwing: error)
+                } catch is CancellationError {
+                    let wrapped = DetDocError("ENGINE_CANCELLED", "Run was cancelled.")
+                    continuation.yield(.error(wrapped))
+                    continuation.finish(throwing: wrapped)
                 } catch {
                     let wrapped = DetDocError("ENGINE_FAILED", "\(error)")
                     continuation.yield(.error(wrapped))
@@ -124,7 +153,7 @@ public actor DetDocEngine {
 
         emit(.progress(phase: .approvePlan, message: "Waiting for plan approval"))
         emit(.planReady(proposed))
-        if await awaitPlanDecision() == .reject {
+        if try await awaitPlanDecision() == .reject {
             throw DetDocError("PLAN_NOT_APPROVED", "Plan was not approved.")
         }
         try store.writeJSON(manifest.runId, "plan.approved.json", proposed)
@@ -169,7 +198,7 @@ public actor DetDocEngine {
 
         emit(.progress(phase: .approveApply, message: "Waiting for apply approval"))
         emit(.patchReady(PatchReview(runId: manifest.runId, changedFiles: changedFiles, patch: patch, worktreePath: worktree.path.path)))
-        if await awaitApplyDecision() == .discard {
+        if try await awaitApplyDecision() == .discard {
             keepWorktree = false
             return WorktreeOutcome(result: RunFlowResult(runId: manifest.runId, applied: false, patch: patch),
                                    keepWorktree: keepWorktree)
@@ -180,7 +209,11 @@ public actor DetDocEngine {
         keepWorktree = false
         emit(.progress(phase: .postApplyValidation, message: "Running validation in main worktree"))
         try await RunApplier().runPostApplyValidation(root: root, store: store, runId: manifest.runId)
-        emit(.progress(phase: .cleanupRun, message: "Removing run artifacts"))
+        // Run artifacts are only deleted when auto-committing; otherwise they are intentionally
+        // retained so the run stays re-appliable, so only announce cleanup in that case.
+        if config.apply.autoCommit {
+            emit(.progress(phase: .cleanupRun, message: "Removing run artifacts"))
+        }
         emit(.progress(phase: .commit, message: "Committing applied changes"))
         try await RunApplier().commitOrStage(repo: mainRepo, approvedTargets: approvedTargets, runId: manifest.runId, autoCommit: config.apply.autoCommit, store: store)
         return WorktreeOutcome(result: RunFlowResult(runId: manifest.runId, applied: true, patch: patch),
