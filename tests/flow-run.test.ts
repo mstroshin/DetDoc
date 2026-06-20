@@ -54,6 +54,7 @@ describe("DetDoc flows", () => {
       "implement",
       "collect_patch",
       "validate_patch",
+      "approve_apply",
       "merge_worktree",
       "cleanup_run",
       "cleanup_worktree",
@@ -63,6 +64,35 @@ describe("DetDoc flows", () => {
     expect(await readFile(join(fixture.cwd, "src/app.ts"), "utf8")).toBe("export const value = 2;\n");
     expect(result.runId).toMatch(/-run-/);
     await expect(access(join(fixture.cwd, ".detdoc", "runs", result.runId))).rejects.toThrow();
+  });
+
+  it("saves a validated run without applying when apply approval is rejected", async () => {
+    const fixture = await createGitFixture({ "docs/spec.md": "old\n", "src/app.ts": "export const value = 1;\n" });
+    await initConfig(fixture.cwd);
+    await writeFile(join(fixture.cwd, "docs/spec.md"), "new behavior\n", "utf8");
+
+    const agent = new FakeAgentRunner({
+      plan: {
+        summary: "Update app value",
+        changes: [
+          {
+            reason: "doc-diff:docs/spec.md:L1-L1",
+            targetFiles: ["src/app.ts"],
+            kind: "modify",
+            rationale: "The changed documentation requires value 2.",
+          },
+        ],
+        questions: [],
+        risk: "low",
+      },
+      writes: { "src/app.ts": "export const value = 2;\n" },
+    });
+
+    const result = await runDocFlow({ cwd: fixture.cwd, agent, approval: new AutoApprovalUI(true, false) });
+
+    expect(result.applied).toBe(false);
+    expect(await readFile(join(fixture.cwd, "src/app.ts"), "utf8")).toBe("export const value = 1;\n");
+    await expect(access(join(fixture.cwd, ".detdoc", "runs", result.runId, "changes.patch"))).resolves.toBeUndefined();
   });
 
   it("reports concrete files while the agent writes approved targets", async () => {

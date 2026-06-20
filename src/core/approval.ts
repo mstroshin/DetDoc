@@ -5,15 +5,28 @@ import type { CliIO } from "../cli/output.js";
 import { writeLine } from "../cli/output.js";
 import type { ProposedPlan } from "./plan.js";
 
+export interface ApplyApprovalContext {
+  runId: string;
+  changedFiles: string[];
+}
+
 export interface ApprovalUI {
   approvePlan(plan: ProposedPlan): Promise<boolean>;
+  approveApply?(context: ApplyApprovalContext): Promise<boolean>;
 }
 
 export class AutoApprovalUI implements ApprovalUI {
-  constructor(private readonly approved = true) {}
+  constructor(
+    private readonly approved = true,
+    private readonly applyApproved = approved,
+  ) {}
 
   async approvePlan(_plan: ProposedPlan): Promise<boolean> {
     return this.approved;
+  }
+
+  async approveApply(_context: ApplyApprovalContext): Promise<boolean> {
+    return this.applyApproved;
   }
 }
 
@@ -72,6 +85,28 @@ export class TerminalApprovalUI implements ApprovalUI {
   async approvePlan(plan: ProposedPlan): Promise<boolean> {
     writeLine(this.io.stdout, formatPlan(plan, pc.createColors(this.io.isInteractive || process.env.FORCE_COLOR !== undefined)));
     return this.confirm("Approve this plan? [y/N]: ");
+  }
+
+  async approveApply(context: ApplyApprovalContext): Promise<boolean> {
+    const colors = pc.createColors(this.io.isInteractive || process.env.FORCE_COLOR !== undefined);
+    writeLine(
+      this.io.stdout,
+      boxen(
+        [
+          `${colors.bold("Run:")} ${context.runId}`,
+          `${colors.bold("Validated changed files:")} ${colors.cyan(context.changedFiles.length)}`,
+          ...context.changedFiles.map((file) => `${colors.cyan("-")} ${colors.cyan(file)}`),
+        ].join("\n"),
+        {
+          title: colors.bold(colors.cyan("DetDoc validated changes")),
+          titleAlignment: "center",
+          padding: 1,
+          borderStyle: "round",
+          borderColor: "cyan",
+        },
+      ),
+    );
+    return this.confirm("Apply validated changes? [y/N]: ");
   }
 
   private async confirm(prompt: string): Promise<boolean> {

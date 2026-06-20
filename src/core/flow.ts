@@ -1,6 +1,6 @@
 import YAML from "yaml";
 import type { AgentImplementationProgressEvent, AgentRunner } from "./agent/agent-runner.js";
-import type { ApprovalUI } from "./approval.js";
+import type { ApplyApprovalContext, ApprovalUI } from "./approval.js";
 import { ArtifactStore } from "./artifacts.js";
 import { loadConfig } from "./config.js";
 import { getNormalizedDocDiff } from "./diff.js";
@@ -30,6 +30,7 @@ export type FlowProgressPhase =
   | "collect_patch"
   | "validate_patch"
   | "repair_validation"
+  | "approve_apply"
   | "merge_worktree"
   | "apply_patch"
   | "post_apply_validation"
@@ -71,6 +72,11 @@ async function runPostApplyValidation(input: { cwd: string; progress?: FlowProgr
   progress(input, { phase: "post_apply_validation", message: "Running validation commands in main worktree", runId });
   const validationLog = await runValidationCommands({ cwd: input.cwd, config: appliedConfig });
   await store.writeText(runId, "post-apply-validation.log", validationLog);
+}
+
+async function approveApply(input: { approval: ApprovalUI; progress?: FlowProgressReporter }, context: ApplyApprovalContext): Promise<boolean> {
+  progress(input, { phase: "approve_apply", message: "Waiting for apply approval", runId: context.runId });
+  return input.approval.approveApply ? input.approval.approveApply(context) : true;
 }
 
 async function mergeValidatedWorktreePatch(input: { progress?: FlowProgressReporter }, repo: GitRepository, patch: string, runId: string): Promise<void> {
@@ -236,6 +242,12 @@ async function runFlow(input: {
     await store.writeText(manifest.runId, "changes.patch", patch);
     await store.writeText(manifest.runId, "validation.log", validationLog);
     await updateManifest(store, manifest);
+
+    if (!(await approveApply(input, { runId: manifest.runId, changedFiles: validation.changedFiles }))) {
+      keepWorktree = false;
+      completed = true;
+      return { runId: manifest.runId, applied: false, patch };
+    }
 
     await mergeValidatedWorktreePatch(input, mainRepo, patch, manifest.runId);
     keepWorktree = false;
