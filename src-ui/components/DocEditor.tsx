@@ -29,7 +29,7 @@ export function DocEditor({ path, markdown, onSave }: { path: string | null; mar
           <button className="rounded-md border border-white/10 px-2 py-1 text-xs" onClick={() => setSourceMode(!sourceMode)} type="button">
             {sourceMode ? "Rich" : "Markdown source"}
           </button>
-          <button className="rounded-md bg-cyan-500 px-2 py-1 text-xs font-semibold text-slate-950" onClick={() => onSave(sourceMode ? source : editor?.getText() ?? source)} type="button">Save</button>
+          <button className="rounded-md bg-cyan-500 px-2 py-1 text-xs font-semibold text-slate-950 disabled:opacity-50" disabled={!sourceMode} title="Switch to Markdown source to save" onClick={() => onSave(source)} type="button">Save</button>
         </div>
       </div>
       {sourceMode ? (

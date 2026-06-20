@@ -271,3 +271,11 @@ npm run gui:typecheck      # typecheck the CLI (same as npm run typecheck)
 npm run gui:typecheck:ui   # typecheck the React/src-ui frontend
 npm run gui:dev            # start the Tauri dev window
 ```
+
+### Deferred parity gaps (vs the TypeScript CLI)
+
+- The run manifest omits several TS fields, including per-file pre-image hashes, so the full pre-image apply guard is deferred.
+- `tauri.conf.json` `beforeDevCommand`/`beforeBuildCommand` still point at the TS CLI scripts and must be repointed at Vite before `gui:dev`/`gui:build`.
+- A brand-new untracked `.md` file does not yet contribute to a run's doc-diff intent.
+- Config `agent.provider` defaults to `pi-rpc` (the new `pi --mode rpc` design), so a config the GUI writes is rejected by the old `pi-sdk` TS CLI.
+- Invalid glob patterns in config are currently skipped rather than erroring.

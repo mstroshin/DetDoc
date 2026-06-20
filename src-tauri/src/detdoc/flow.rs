@@ -41,9 +41,15 @@ pub fn run_doc_flow(root: &Path, agent: &dyn AgentRunner, options: RunFlowOption
     store.write_json(&run_id, "manifest.json", &manifest)?;
 
     agent.implement(&manifest.approved_targets, &worktree.path)?;
+    let mut add_args = vec!["add", "-N", "--"];
+    for target in &manifest.approved_targets { add_args.push(target); }
+    let _ = worktree_repo.git(&add_args);
     let mut args = vec!["diff", "--no-color", "--no-ext-diff", "--binary", "--"];
     for target in &manifest.approved_targets { args.push(target); }
     let patch = worktree_repo.git(&args)?;
+    if patch.trim().is_empty() {
+        return Err(DetDocError::new("EMPTY_PATCH", "Agent produced no code changes for approved target files"));
+    }
     validate_patch_paths(&patch, &manifest.approved_targets, &config)?;
     store.write_text(&run_id, "changes.patch", &patch)?;
 
@@ -59,9 +65,18 @@ pub fn apply_saved_run(root: &Path, run_id: &str, auto_commit: bool) -> DetDocRe
     let manifest: RunManifest = store.read_json(run_id, "manifest.json")?;
     let patch = store.read_text(run_id, "changes.patch")?;
     let repo = GitRepository::new(root);
+    let head = repo.head()?;
+    if head != manifest.base_commit {
+        return Err(DetDocError::new(
+            "APPLY_BASE_MISMATCH",
+            format!("HEAD ({}) does not match the saved run base commit ({})", head, manifest.base_commit),
+        ));
+    }
     repo.apply_patch(&patch)?;
     if auto_commit {
-        repo.git(&["add", "-A", "--", "."])?;
+        let mut args = vec!["add", "--"];
+        for target in &manifest.approved_targets { args.push(target); }
+        repo.git(&args)?;
         repo.git(&["commit", "-m", &format!("DetDoc apply {}", run_id)])?;
         store.delete_run(run_id)?;
     } else {

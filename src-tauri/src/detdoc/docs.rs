@@ -3,13 +3,21 @@ use super::error::{DetDocError, DetDocResult};
 use super::git::GitRepository;
 use super::paths::is_doc_path;
 
+fn is_run_exempt_path(path: &str) -> bool {
+    path.starts_with(".detdoc/") || path == ".gitignore"
+}
+
 pub fn get_normalized_doc_diff(repo: &GitRepository, config: &DetDocConfig) -> DetDocResult<String> {
     let status = repo.status_porcelain()?;
-    let non_doc: Vec<String> = status.iter().filter(|entry| !is_doc_path(&entry.path, config)).map(|entry| entry.path.clone()).collect();
+    let non_doc: Vec<String> = status
+        .iter()
+        .filter(|entry| !is_doc_path(&entry.path, config) && !is_run_exempt_path(&entry.path))
+        .map(|entry| entry.path.clone())
+        .collect();
     if !non_doc.is_empty() {
         return Err(DetDocError::new("DIRTY_NON_DOC_CHANGES", non_doc.join(", ")));
     }
-    let doc_paths: Vec<String> = status.iter().map(|entry| entry.path.clone()).collect();
+    let doc_paths: Vec<String> = status.iter().filter(|entry| is_doc_path(&entry.path, config)).map(|entry| entry.path.clone()).collect();
     if doc_paths.is_empty() {
         return Err(DetDocError::new("NO_DOC_CHANGES", "No documentation changes found"));
     }
