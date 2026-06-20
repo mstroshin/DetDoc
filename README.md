@@ -269,13 +269,21 @@ Useful commands:
 npm run gui:test:rust      # run Rust crate tests (requires cargo in PATH)
 npm run gui:typecheck      # typecheck the CLI (same as npm run typecheck)
 npm run gui:typecheck:ui   # typecheck the React/src-ui frontend
-npm run gui:dev            # start the Tauri dev window
+npm run gui:vite           # start the Vite frontend dev server only (http://localhost:1420)
+npm run gui:dev            # build + launch the Tauri desktop window
 ```
+
+### Running the desktop GUI
+
+`npm run gui:dev` starts the Vite frontend (Tailwind/PostCSS configured) and launches the Tauri
+window. The first launch compiles the Rust app and can take several minutes; cargo must be on
+`PATH` (`. "$HOME/.cargo/env"` if installed via rustup). In the app header, set the project root to
+a git repository to work against it. The MVP agent run uses a built-in fake agent; real
+`pi --mode rpc` execution is a later step.
 
 ### Deferred parity gaps (vs the TypeScript CLI)
 
 - The run manifest omits several TS fields, including per-file pre-image hashes, so the full pre-image apply guard is deferred.
-- `tauri.conf.json` `beforeDevCommand`/`beforeBuildCommand` still point at the TS CLI scripts and must be repointed at Vite before `gui:dev`/`gui:build`.
 - A brand-new untracked `.md` file does not yet contribute to a run's doc-diff intent.
 - Config `agent.provider` defaults to `pi-rpc` (the new `pi --mode rpc` design), so a config the GUI writes is rejected by the old `pi-sdk` TS CLI.
 - Invalid glob patterns in config are currently skipped rather than erroring.
