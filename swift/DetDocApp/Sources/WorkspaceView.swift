@@ -54,7 +54,13 @@ struct WorkspaceView: View {
                     .foregroundStyle(workspace.status?.piAvailable == true ? .green : .orange)
             }
         }
-        .task { await workspace.refresh() }
+        .task {
+            await workspace.refresh()
+            // Dev/automation affordance: auto-start a run on open.
+            if ProcessInfo.processInfo.environment["DETDOC_AUTORUN"] == "1" {
+                panel.start(mode: .run)
+            }
+        }
         .onChange(of: selectedDoc) { _, new in if let new { editor.open(new) } }
         .onChange(of: panel.stage) { _, stage in if stage == .completed { Task { await workspace.refresh(); runs.refresh() } } }
         .sheet(isPresented: $showRuns) { RunsSheet(runs: runs).frame(minWidth: 480, minHeight: 360) }
