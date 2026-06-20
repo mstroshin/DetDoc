@@ -258,3 +258,16 @@ The built CLI entrypoint is:
 ```bash
 dist/src/index.js
 ```
+
+## GUI rewrite development
+
+The DetDoc GUI rewrite lives beside the current TypeScript CLI while Rust/Tauri reaches parity. The MVP GUI is macOS-first and expects `pi` to be installed in `PATH`. The current TypeScript CLI remains as a temporary parity reference during the rewrite.
+
+Useful commands:
+
+```bash
+npm run gui:test:rust      # run Rust crate tests (requires cargo in PATH)
+npm run gui:typecheck      # typecheck the CLI (same as npm run typecheck)
+npm run gui:typecheck:ui   # typecheck the React/src-ui frontend
+npm run gui:dev            # start the Tauri dev window
+```
