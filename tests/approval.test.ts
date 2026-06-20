@@ -65,11 +65,14 @@ describe("TerminalApprovalUI", () => {
       approval.approveApply({
         runId: "20260620T001627Z-run-1ae174a1",
         changedFiles: [".detdoc/config.yml", "Sources/App.swift"],
+        worktreePath: ".worktrees/20260620T001627Z-run-1ae174a1",
       }),
     ).resolves.toBe(false);
 
     const plain = stripAnsi(io.stdoutText());
     expect(plain).toContain("DetDoc validated changes");
+    expect(plain).toContain("Inspect worktree:");
+    expect(plain).toContain(".worktrees/20260620T001627Z-run-1ae174a1");
     expect(plain).toContain("Press y then Enter to apply these changes and create a git commit.");
     expect(plain).toContain("Press n then Enter to keep this run saved without applying.");
     expect(plain).toContain("Apply these validated changes and create a commit? [y/N]:");

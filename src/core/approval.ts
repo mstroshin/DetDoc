@@ -97,6 +97,7 @@ export class TerminalApprovalUI implements ApprovalUI {
           `${colors.bold("Run:")} ${context.runId}`,
           `${colors.bold("Validated changed files:")} ${colors.cyan(context.changedFiles.length)}`,
           ...context.changedFiles.map((file) => `${colors.cyan("-")} ${colors.cyan(file)}`),
+          ...(context.worktreePath ? ["", `${colors.bold("Inspect worktree:")} ${colors.cyan(context.worktreePath)}`] : []),
           "",
           `${colors.bold("Next:")} Press y then Enter to apply these changes and create a git commit.`,
           "      Press n then Enter to keep this run saved without applying.",
