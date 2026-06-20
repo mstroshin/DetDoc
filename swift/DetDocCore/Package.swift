@@ -13,7 +13,8 @@ let package = Package(
     targets: [
         .target(
             name: "DetDocCore",
-            dependencies: [.product(name: "Yams", package: "Yams")]
+            dependencies: [.product(name: "Yams", package: "Yams")],
+            swiftSettings: [.treatAllWarnings(as: .error)]
         ),
         .testTarget(
             name: "DetDocCoreTests",

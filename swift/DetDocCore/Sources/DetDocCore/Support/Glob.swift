@@ -1,8 +1,8 @@
 import Foundation
 
-/// Translates a globset-compatible glob into an anchored regex.
-/// Rules: `*` matches any run of non-`/`; `**` matches across `/`; a `**/`
-/// segment also matches zero directories; `?` matches one non-`/` char.
+/// Translates a globset-compatible glob into an anchored regex, matching the
+/// Rust reference's globset defaults (literal_separator = false): `*` and `?`
+/// both match across `/`; a `**/` segment matches zero or more directories.
 public struct Glob: Sendable {
     private let regex: NSRegularExpression?
 
@@ -37,11 +37,11 @@ public struct Glob: Sendable {
                         i += 2
                     }
                 } else {
-                    out += "[^/]*"          // `*` — any chars except `/`
+                    out += ".*"            // `*` — any chars incl. `/` (globset default)
                     i += 1
                 }
             case "?":
-                out += "[^/]"
+                out += "."                // `?` — any single char incl. `/` (globset default)
                 i += 1
             case ".", "^", "$", "+", "(", ")", "[", "]", "{", "}", "|", "\\":
                 out += "\\" + String(c)
