@@ -65,8 +65,9 @@ pub async fn docs_list(root: String) -> Result<Vec<DocFile>, String> {
     let mut docs = vec![];
     for entry in walkdir::WalkDir::new(root_path.join("docs")).into_iter().filter_map(Result::ok) {
         if entry.file_type().is_file() && entry.path().extension().and_then(|ext| ext.to_str()) == Some("md") {
-            let relative = entry.path().strip_prefix(&root_path).unwrap().to_string_lossy().replace('\\', "/");
-            let title = entry.path().file_stem().unwrap().to_string_lossy().to_string();
+            let Ok(rel_path) = entry.path().strip_prefix(&root_path) else { continue; };
+            let relative = rel_path.to_string_lossy().replace('\\', "/");
+            let title = entry.path().file_stem().unwrap_or_default().to_string_lossy().to_string();
             docs.push(DocFile { path: relative, title });
         }
     }
