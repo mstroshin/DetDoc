@@ -2,12 +2,13 @@ import { access, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import YAML from "yaml";
-import { AutoApprovalUI, type ApprovalUI } from "../src/core/approval.js";
+import { AutoApprovalUI, type ApplyApprovalContext, type ApprovalUI } from "../src/core/approval.js";
 import { defaultConfig, initConfig } from "../src/core/config.js";
 import { FakeAgentRunner } from "../src/core/agent/fake-agent-runner.js";
 import type { AgentRunner, ImplementRequest, PlanRequest, RepairValidationRequest } from "../src/core/agent/agent-runner.js";
 import { zeroTokenUsage } from "../src/core/agent/agent-runner.js";
 import { runDocFlow, runFixFlow } from "../src/core/flow.js";
+import { GitRepository } from "../src/core/git.js";
 import { cleanupFixtures, createGitFixture } from "./helpers/git-fixture.js";
 
 afterEach(cleanupFixtures);
@@ -98,6 +99,54 @@ describe("DetDoc flows", () => {
     expect(result.applied).toBe(false);
     expect(await readFile(join(fixture.cwd, "src/app.ts"), "utf8")).toBe("export const value = 1;\n");
     await expect(access(join(fixture.cwd, ".detdoc", "runs", result.runId, "changes.patch"))).resolves.toBeUndefined();
+  });
+
+  it("keeps the named run worktree inspectable until apply approval, then cleans it up on reject", async () => {
+    const fixture = await createGitFixture({ "docs/spec.md": "old\n", "src/app.ts": "export const value = 1;\n" });
+    await initConfig(fixture.cwd);
+    await writeFile(join(fixture.cwd, "docs/spec.md"), "new behavior\n", "utf8");
+
+    const agent = new FakeAgentRunner({
+      plan: {
+        summary: "Update app value",
+        changes: [
+          {
+            reason: "doc-diff:docs/spec.md:L1-L1",
+            targetFiles: ["src/app.ts"],
+            kind: "modify",
+            rationale: "The changed documentation requires value 2.",
+          },
+        ],
+        questions: [],
+        risk: "low",
+      },
+      writes: { "src/app.ts": "export const value = 2;\n" },
+    });
+
+    let runId = "";
+    let worktreePath = "";
+    const approval: ApprovalUI = {
+      async approvePlan() {
+        return true;
+      },
+      async approveApply(context: ApplyApprovalContext) {
+        runId = context.runId;
+        worktreePath = join(fixture.cwd, ".worktrees", runId);
+        expect(context.worktreePath).toBe(worktreePath);
+        await expect(access(worktreePath)).resolves.toBeUndefined();
+        const diff = await new GitRepository(worktreePath).diff();
+        expect(diff).toContain("export const value = 2");
+        return false;
+      },
+    };
+
+    const result = await runDocFlow({ cwd: fixture.cwd, agent, approval });
+
+    expect(result.applied).toBe(false);
+    expect(result.runId).toBe(runId);
+    await expect(access(worktreePath)).rejects.toThrow();
+    const branches = await fixture.git(["branch", "--list", runId]);
+    expect(branches.stdout.trim()).toBe("");
   });
 
   it("reports concrete files while the agent writes approved targets", async () => {

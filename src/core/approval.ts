@@ -8,6 +8,7 @@ import type { ProposedPlan } from "./plan.js";
 export interface ApplyApprovalContext {
   runId: string;
   changedFiles: string[];
+  worktreePath?: string;
 }
 
 export interface ApprovalUI {

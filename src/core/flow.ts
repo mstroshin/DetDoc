@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import YAML from "yaml";
 import { addTokenUsage, zeroTokenUsage, type AgentImplementationProgressEvent, type AgentRunner, type TokenUsage } from "./agent/agent-runner.js";
 import type { ApplyApprovalContext, ApprovalUI } from "./approval.js";
@@ -198,7 +199,8 @@ async function runFlow(input: {
   await store.writeText(manifest.runId, "run.log", `mode=${input.mode}\n`);
 
   progress(input, { phase: "create_worktree", message: "Creating isolated worktree", runId: manifest.runId });
-  const worktree = await new WorktreeManager().createFromHead(mainRepo);
+  const worktreePath = join(cwd, ".worktrees", manifest.runId);
+  const worktree = await new WorktreeManager().createFromHead(mainRepo, { path: worktreePath, branchName: manifest.runId });
   let keepWorktree = config.worktree.keepOnFailure;
   let completed = false;
   try {
@@ -282,7 +284,7 @@ async function runFlow(input: {
     await store.writeText(manifest.runId, "validation.log", validationLog);
     await updateManifest(store, manifest);
 
-    if (!(await approveApply(input, { runId: manifest.runId, changedFiles: validation.changedFiles }))) {
+    if (!(await approveApply(input, { runId: manifest.runId, changedFiles: validation.changedFiles, worktreePath }))) {
       keepWorktree = false;
       completed = true;
       return { runId: manifest.runId, applied: false, patch, tokenUsage };

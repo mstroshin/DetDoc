@@ -280,7 +280,7 @@ async function createInitialCommit(cwd: string, files: string[]): Promise<boolea
   return true;
 }
 
-const managedGitignoreEntries = [".DS_Store", ".detdoc/runs/*", "!.detdoc/runs/.gitkeep"];
+const managedGitignoreEntries = [".DS_Store", ".detdoc/runs/*", "!.detdoc/runs/.gitkeep", ".worktrees/"];
 
 async function ensureGitignoreEntry(cwd: string, entry: string): Promise<boolean> {
   const path = join(cwd, ".gitignore");
