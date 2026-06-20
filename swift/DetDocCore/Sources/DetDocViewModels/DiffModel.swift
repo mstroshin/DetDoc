@@ -38,7 +38,9 @@ public enum DiffModel {
             let line = String(raw)
             if line.hasPrefix("diff --git ") {
                 flush()
-                currentPath = line.split(separator: " ").last.map { String($0).replacingOccurrences(of: "b/", with: "") }
+                if let last = line.split(separator: " ").last.map(String.init) {
+                    currentPath = last.hasPrefix("b/") ? String(last.dropFirst(2)) : last
+                }
             }
             let kind: DiffLineKind
             if line.hasPrefix("+++") || line.hasPrefix("---") || line.hasPrefix("diff ") || line.hasPrefix("index ") {

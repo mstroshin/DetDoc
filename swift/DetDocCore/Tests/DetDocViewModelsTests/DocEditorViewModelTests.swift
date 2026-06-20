@@ -31,3 +31,16 @@ import Testing
     let preview = vm.previewMarkdown()
     #expect(String(preview.characters).contains("Hello"))
 }
+
+@MainActor
+@Test func saveSuccessLeavesErrorNilAndIsDirtyFalse() async throws {
+    let fx = try await VMGitFixture()
+    try await fx.detdocInit()
+    let vm = DocEditorViewModel(root: fx.root, config: .default)
+    vm.open("docs/idea.md")
+    vm.edit("updated\n")
+    #expect(vm.isDirty == true)
+    vm.save()
+    #expect(vm.isDirty == false)
+    #expect(vm.error == nil)
+}

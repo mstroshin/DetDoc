@@ -39,8 +39,19 @@ public final class RunPanelViewModel {
                 for try await event in stream {
                     self?.handle(event)
                 }
+                // AsyncThrowingStream exits the for loop normally (not via throw) when the
+                // consumer task is cancelled and the stream terminates via onTermination.
+                // Detect this and surface it as ENGINE_CANCELLED so the UI reaches .failed.
+                if Task.isCancelled {
+                    self?.fail(DetDocError("ENGINE_CANCELLED", "Run cancelled"))
+                }
             } catch let e as DetDocError {
                 self?.fail(e)
+            } catch is CancellationError {
+                // Direct CancellationError throw (e.g. from try Task.checkCancellation()
+                // called before the stream loop) — normalise to ENGINE_CANCELLED so the UI
+                // always receives a stable, identifiable code rather than ENGINE_FAILED.
+                self?.fail(DetDocError("ENGINE_CANCELLED", "Run cancelled"))
             } catch {
                 self?.fail(DetDocError("ENGINE_FAILED", "\(error)"))
             }

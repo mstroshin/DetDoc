@@ -60,6 +60,19 @@ public struct ArtifactStore: Sendable {
         }
     }
 
+    public func listRuns() -> [RunSummary] {
+        let runsDir = root  // ArtifactStore.root is already <project>/.detdoc/runs
+        guard let entries = try? FileManager.default.contentsOfDirectory(at: runsDir, includingPropertiesForKeys: nil) else { return [] }
+        var summaries: [RunSummary] = []
+        for entry in entries {
+            let runId = entry.lastPathComponent
+            guard let manifest: RunManifest = try? readJSON(RunManifest.self, runId, "manifest.json") else { continue }
+            let hasPatch = FileManager.default.fileExists(atPath: entry.appendingPathComponent("changes.patch").path)
+            summaries.append(RunSummary(runId: runId, hasPatch: hasPatch, approvedTargets: manifest.approvedTargets))
+        }
+        return summaries.sorted { $0.runId > $1.runId }
+    }
+
     public func deleteRun(_ runId: String) throws {
         do {
             try FileManager.default.removeItem(at: runDir(runId))

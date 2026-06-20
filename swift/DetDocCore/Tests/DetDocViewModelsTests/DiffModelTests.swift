@@ -32,3 +32,16 @@ import Testing
     """
     #expect(DiffModel.parse(patch).map(\.path) == ["x", "y"])
 }
+
+@Test func parseMultiSegmentPathWithoutPlusPlusHeader() {
+    // Regression: the old replacingOccurrences(of:"b/") would mangle b/lib/sub/x → lisux.
+    // Mode-only diffs have no +++ b/ header so the fallback path from diff --git is used.
+    let patch = """
+    diff --git a/lib/sub/x b/lib/sub/x
+    old mode 100644
+    new mode 100755
+    """
+    let files = DiffModel.parse(patch)
+    #expect(files.count == 1)
+    #expect(files[0].path == "lib/sub/x")
+}

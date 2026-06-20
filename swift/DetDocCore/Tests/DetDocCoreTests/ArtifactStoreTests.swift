@@ -34,3 +34,21 @@ import Testing
     try store.deleteRun("r2")
     #expect(!FileManager.default.fileExists(atPath: store.runDir("r2").path))
 }
+
+@Test func listRunsReturnsSummaryWithHasPatch() throws {
+    let tmp = TempDir()
+    let store = ArtifactStore(projectRoot: tmp.url)
+    let manifest = RunManifest(runId: "20260620T101112Z-run-aabbccdd", mode: .run, baseCommit: "abc123", approvedTargets: ["src/a.swift"])
+    try store.createRun(manifest)
+    // No patch yet — hasPatch should be false
+    var summaries = store.listRuns()
+    #expect(summaries.count == 1)
+    #expect(summaries[0].runId == manifest.runId)
+    #expect(summaries[0].hasPatch == false)
+    // Write the patch file — hasPatch should become true
+    try store.writeText(manifest.runId, "changes.patch", "diff content\n")
+    summaries = store.listRuns()
+    #expect(summaries.count == 1)
+    #expect(summaries[0].hasPatch == true)
+    #expect(summaries[0].approvedTargets == ["src/a.swift"])
+}

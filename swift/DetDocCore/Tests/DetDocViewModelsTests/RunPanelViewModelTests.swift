@@ -37,3 +37,16 @@ import Testing
     await poll { await vm.stage == .failed }
     #expect(vm.error?.code == "PLAN_NOT_APPROVED")
 }
+
+@MainActor
+@Test func runPanelCancelEndsInFailedStateWithStableCode() async throws {
+    let fx = try await VMGitFixture()
+    try await fx.detdocInit()
+    try fx.write("docs/idea.md", "changed\n")
+    let vm = RunPanelViewModel(root: fx.root, agent: FakeAgentRunner(target: "src/app.swift", content: "x\n"))
+    vm.start(mode: .run)
+    await poll { await vm.stage == .planPending }
+    vm.cancel()
+    await poll { await vm.stage == .failed }
+    #expect(vm.error?.code == "ENGINE_CANCELLED")
+}

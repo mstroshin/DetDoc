@@ -36,18 +36,6 @@ public final class WorkspaceViewModel {
     }
 
     private func loadRuns() -> [RunSummary] {
-        let store = ArtifactStore(projectRoot: root)
-        let runsDir = root.appendingPathComponent(".detdoc/runs")
-        guard let entries = try? FileManager.default.contentsOfDirectory(at: runsDir, includingPropertiesForKeys: [.isDirectoryKey]) else {
-            return []
-        }
-        var summaries: [RunSummary] = []
-        for entry in entries {
-            let runId = entry.lastPathComponent
-            guard let manifest: RunManifest = try? store.readJSON(RunManifest.self, runId, "manifest.json") else { continue }
-            let hasPatch = FileManager.default.fileExists(atPath: entry.appendingPathComponent("changes.patch").path)
-            summaries.append(RunSummary(runId: runId, hasPatch: hasPatch, approvedTargets: manifest.approvedTargets))
-        }
-        return summaries.sorted { $0.runId > $1.runId }
+        ArtifactStore(projectRoot: root).listRuns()
     }
 }

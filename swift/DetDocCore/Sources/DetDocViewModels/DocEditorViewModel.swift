@@ -8,6 +8,7 @@ public final class DocEditorViewModel {
     public private(set) var selectedPath: String?
     public private(set) var source: String = ""
     public private(set) var isDirty: Bool = false
+    public private(set) var error: DetDocError?
 
     private let root: URL
     private let docs: DocsService
@@ -19,7 +20,16 @@ public final class DocEditorViewModel {
 
     public func open(_ path: String) {
         selectedPath = path
-        source = (try? docs.read(path)) ?? ""
+        do {
+            source = try docs.read(path)
+            error = nil
+        } catch let e as DetDocError {
+            error = e
+            source = ""
+        } catch {
+            self.error = DetDocError("DOC_READ_FAILED", "\(error)")
+            source = ""
+        }
         isDirty = false
     }
 
@@ -30,8 +40,15 @@ public final class DocEditorViewModel {
 
     public func save() {
         guard let path = selectedPath else { return }
-        try? docs.write(path, source)
-        isDirty = false
+        do {
+            try docs.write(path, source)
+            isDirty = false
+            error = nil
+        } catch let e as DetDocError {
+            error = e
+        } catch {
+            self.error = DetDocError("DOC_WRITE_FAILED", "\(error)")
+        }
     }
 
     public func previewMarkdown() -> AttributedString {
