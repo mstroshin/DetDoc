@@ -1,0 +1,30 @@
+name: DetDocApp
+options:
+  bundleIdPrefix: com.detdoc
+  deploymentTarget:
+    macOS: "27.0"
+  createIntermediateGroups: true
+packages:
+  DetDocCore:
+    path: ../DetDocCore
+targets:
+  DetDocApp:
+    type: application
+    platform: macOS
+    sources: [Sources]
+    dependencies:
+      - package: DetDocCore
+        product: DetDocCore
+      - package: DetDocCore
+        product: DetDocViewModels
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.detdoc.app
+        PRODUCT_NAME: DetDoc
+        MARKETING_VERSION: "0.1"
+        CURRENT_PROJECT_VERSION: "1"
+        CODE_SIGNING_ALLOWED: NO
+        SWIFT_VERSION: "6.0"
+        INFOPLIST_KEY_NSHumanReadableCopyright: ""
+        INFOPLIST_KEY_LSApplicationCategoryType: "public.app-category.developer-tools"
