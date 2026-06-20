@@ -24,7 +24,11 @@ let package = Package(
         ),
         .testTarget(
             name: "DetDocCoreTests",
-            dependencies: ["DetDocCore"]
+            dependencies: ["DetDocCore"],
+            resources: [
+                .copy("Support/fake-pi.sh"),
+                .copy("Support/fake-pi-plan.jsonl"),
+            ]
         ),
         .testTarget(
             name: "DetDocViewModelsTests",

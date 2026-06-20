@@ -1,0 +1,4 @@
+{"type":"response","command":"set_thinking_level","success":true}
+{"type":"response","command":"prompt","success":true}
+{"type":"agent_start"}
+{"type":"agent_end","messages":[{"role":"assistant","content":[{"type":"text","text":"{\"summary\":\"Fake plan\",\"changes\":[{\"reason\":\"doc-diff:docs/spec.md:L1-L2\",\"targetFiles\":[\"src/app.swift\"],\"kind\":\"modify\",\"rationale\":\"r\"}],\"questions\":[],\"risk\":\"low\"}"}],"usage":{"input":10,"output":5,"cacheRead":0,"cacheWrite":0}}]}
