@@ -117,3 +117,17 @@ pub async fn apply_saved_run_command(root: String, run_id: String, auto_commit: 
 pub async fn pi_health_check() -> Result<bool, String> {
     Ok(crate::detdoc::pi_rpc::check_pi_available())
 }
+
+#[tauri::command(async)]
+pub fn pick_project_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    app.run_on_main_thread(move || {
+        let folder = rfd::FileDialog::new()
+            .set_title("Select project folder")
+            .pick_folder();
+        let _ = tx.send(folder);
+    })
+    .map_err(|error| error.to_string())?;
+    let folder = rx.recv().map_err(|error| error.to_string())?;
+    Ok(folder.map(|path| path.to_string_lossy().to_string()))
+}

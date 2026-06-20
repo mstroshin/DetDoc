@@ -5,6 +5,7 @@ pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             commands::ping,
+            commands::pick_project_folder,
             commands::project_status,
             commands::detdoc_init,
             commands::docs_list,

@@ -29,4 +29,7 @@ export const api = {
   piHealthCheck() {
     return invoke<boolean>("pi_health_check");
   },
+  pickProjectFolder() {
+    return invoke<string | null>("pick_project_folder");
+  },
 };
