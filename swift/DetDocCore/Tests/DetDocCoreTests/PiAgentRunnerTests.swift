@@ -60,3 +60,44 @@ private let planJSON = "{\"summary\":\"S\",\"changes\":[{\"reason\":\"doc-diff:d
     #expect(argsBox.args.contains("--model"))
     #expect(argsBox.args.contains("anthropic/claude-opus"))
 }
+
+private func approvedPlan() -> ProposedPlan {
+    ProposedPlan(summary: "S", changes: [PlanChange(reason: "doc-diff:docs/a.md:L1", targetFiles: ["src/app.swift"], kind: "modify", rationale: "r")], risk: "low")
+}
+
+@Test func implementSendsImplementationPromptAndReportsProgress() async throws {
+    let script = [
+        "{\"type\":\"response\",\"command\":\"prompt\",\"success\":true}",
+        "{\"type\":\"tool_execution_start\",\"toolName\":\"write\",\"args\":{\"path\":\"src/app.swift\"}}",
+        "{\"type\":\"tool_execution_start\",\"toolName\":\"bash\",\"args\":{\"command\":\"swift build\"}}",
+        try agentEndLine(planJSON: "{}", input: 1, output: 1),
+    ]
+    let transport = FakePiTransport(scriptLines: script)
+    let progress = ProgressBox()
+    let runner = PiAgentRunner(executable: "pi") { _, args, _ in
+        #expect(args.contains("read,grep,find,ls,bash,edit,write"))  // implementation tool set
+        return transport
+    }
+    let request = ImplementRequest(mode: .run, input: "IN", config: .default, cwd: URL(fileURLWithPath: "/tmp"),
+                                   approvedPlan: approvedPlan(), approvedTargets: ["src/app.swift"],
+                                   progress: { progress.append($0) })
+    let result = try await runner.implement(request)
+
+    #expect(result.usage.input == 1)
+    #expect(transport.sentLines.contains { $0.contains("DetDoc implementation phase") })
+    #expect(progress.events.contains { if case .write(let p) = $0 { return p == "src/app.swift" } else { return false } })
+    #expect(progress.events.contains { if case .bash(let c) = $0 { return c == "swift build" } else { return false } })
+}
+
+@Test func repairValidationSendsRepairPrompt() async throws {
+    let transport = FakePiTransport(scriptLines: [
+        "{\"type\":\"response\",\"command\":\"prompt\",\"success\":true}",
+        "{\"type\":\"agent_end\",\"messages\":[]}",
+    ])
+    let runner = PiAgentRunner(executable: "pi") { _, _, _ in transport }
+    let base = ImplementRequest(mode: .run, input: "IN", config: .default, cwd: URL(fileURLWithPath: "/tmp"),
+                                approvedPlan: approvedPlan(), approvedTargets: ["src/app.swift"], progress: nil)
+    _ = try await runner.repairValidation(RepairRequest(base: base, validationLog: "FAILED: grep", attempt: 1))
+    #expect(transport.sentLines.contains { $0.contains("DetDoc validation repair phase") })
+    #expect(transport.sentLines.contains { $0.contains("FAILED: grep") })
+}

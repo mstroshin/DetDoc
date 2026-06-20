@@ -35,7 +35,24 @@ public struct PiAgentRunner: AgentRunner {
     }
 
     public func implement(_ request: ImplementRequest) async throws -> AgentRunResult {
-        AgentRunResult()
+        try await runImplementation(request,
+                                    prompt: PiAgentPrompts.implementationPrompt(request),
+                                    progress: request.progress)
+    }
+
+    public func repairValidation(_ request: RepairRequest) async throws -> AgentRunResult {
+        try await runImplementation(request.base,
+                                    prompt: PiAgentPrompts.validationRepairPrompt(request),
+                                    progress: request.base.progress)
+    }
+
+    private func runImplementation(_ request: ImplementRequest,
+                                   prompt: String,
+                                   progress: (@Sendable (AgentImplementationProgress) -> Void)?) async throws -> AgentRunResult {
+        let args = Self.spawnArgs(model: request.config.agent.model, tools: Self.implementationTools)
+        let transport = try makeTransport(executable, args, request.cwd)
+        let messages = try await drive(transport, thinking: request.config.agent.thinking, prompt: prompt, progress: progress)
+        return AgentRunResult(usage: PiPlanParsing.tokenUsage(messages))
     }
 
     static func spawnArgs(model: String?, tools: [String]) -> [String] {
