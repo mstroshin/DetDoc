@@ -34,6 +34,7 @@ describe("run command options", () => {
       expect(code).toBe(0);
       expect(io.stderrText()).not.toContain("unknown option");
       expect(io.stderrText()).not.toContain("Plan was not approved");
+      expect(io.stderrText()).not.toContain("Waiting for plan approval");
       expect(io.stdoutText()).toMatch(/Run .* saved/);
       expect(await readFile(join(fixture.cwd, "src/app.ts"), "utf8")).toBe("export const value = 1;\n");
     } finally {
@@ -59,6 +60,8 @@ describe("run command options", () => {
       expect(code).toBe(0);
       expect(io.stderrText()).not.toContain("unknown option");
       expect(io.stderrText()).not.toContain("Plan was not approved");
+      expect(io.stderrText()).not.toContain("Waiting for plan approval");
+      expect(io.stderrText()).not.toContain("Waiting for apply approval");
       expect(io.stdoutText()).toMatch(/Run .* applied/);
       expect(await readFile(join(fixture.cwd, "src/app.ts"), "utf8")).toBe("export const value = 2;\n");
     } finally {

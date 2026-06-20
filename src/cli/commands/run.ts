@@ -5,7 +5,7 @@ import type { AgentRunner } from "../../core/agent/agent-runner.js";
 import { FakeAgentRunner } from "../../core/agent/fake-agent-runner.js";
 import { createDefaultAgentRunner } from "../../core/agent/pi-sdk-runner.js";
 import { TerminalApprovalUI, type ApplyApprovalContext } from "../../core/approval.js";
-import { runDocFlow } from "../../core/flow.js";
+import { runDocFlow, type FlowProgressReporter } from "../../core/flow.js";
 import { createRunProgressController } from "../progress.js";
 
 function agentFromEnv(fake: FakeAgentRunner): AgentRunner {
@@ -17,6 +17,14 @@ function approvalFromOptions(io: CliIO, options: RunOptions) {
   return {
     approvePlan: options.autoApprove ? async () => true : terminal.approvePlan.bind(terminal),
     approveApply: options.autoApply ? async (_context: ApplyApprovalContext) => true : terminal.approveApply.bind(terminal),
+  };
+}
+
+function progressFromOptions(report: FlowProgressReporter, options: RunOptions): FlowProgressReporter {
+  return (event) => {
+    if (options.autoApprove && event.phase === "approve_plan") return;
+    if (options.autoApply && event.phase === "approve_apply") return;
+    report(event);
   };
 }
 
@@ -51,7 +59,7 @@ export function registerRunCommand(program: Command, io: CliIO): void {
       const progress = createRunProgressController(io);
       try {
         const approval = approvalFromOptions(io, options);
-        const result = await runDocFlow({ cwd: process.cwd(), agent: agentFromEnv(agent), approval, progress: progress.report });
+        const result = await runDocFlow({ cwd: process.cwd(), agent: agentFromEnv(agent), approval, progress: progressFromOptions(progress.report, options) });
         writeLine(io.stdout, `Run ${result.runId} ${result.applied ? "applied" : "saved"}`);
       } catch (error) {
         progress.fail();
