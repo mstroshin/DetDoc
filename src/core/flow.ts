@@ -306,10 +306,12 @@ export async function applyRun(input: { cwd: string; runId: string; progress?: F
     }
   }
 
+  progress(input, { phase: "apply_patch", message: "Applying saved patch", runId: input.runId });
   await repo.applyPatch(patch);
   await runPostApplyValidation(input, store, input.runId);
   await deleteRunArtifacts(input, store, input.runId);
   await commitAppliedChanges(input, repo, input.runId);
+  progress(input, { phase: "done", message: "Apply complete", runId: input.runId });
   return { runId: input.runId, applied: true, patch };
 }
 
