@@ -85,7 +85,10 @@ struct LivePreviewTextView: NSViewRepresentable {
 
             let caret = textView?.selectedRange().location ?? -1
             let paraStart = range.location
-            var deletes: [NSRange] = []   // paragraph-local syntax ranges to remove (collapsed links)
+
+            // Pending modifications to apply highest-offset-first after styling.
+            // nil replacement = delete; non-nil = replace with attachment.
+            var modifications: [(range: NSRange, replacement: NSAttributedString?)] = []
 
             for span in spans {
                 switch span.kind {
@@ -103,27 +106,52 @@ struct LivePreviewTextView: NSViewRepresentable {
                     let absEnd = absStart + span.range.length
                     let caretInLink = caret >= absStart && caret < absEnd
                     if let res = resolver.resolve(destination) {
-                        let color: NSColor = res.exists ? .linkColor : .systemRed
-                        display.addAttribute(.foregroundColor, value: color, range: span.range)
-                        if !res.exists {
+                        if caretInLink {
+                            // Caret inside link: show raw markdown with styling.
+                            let color: NSColor = res.exists ? .linkColor : .systemRed
+                            display.addAttribute(.foregroundColor, value: color, range: span.range)
+                            if !res.exists {
+                                display.addAttribute(.underlineStyle, value: NSUnderlineStyle.patternDot.rawValue | NSUnderlineStyle.single.rawValue, range: span.range)
+                                display.addAttribute(.toolTip, value: "Missing: \(res.docsRelativePath)", range: span.range)
+                            }
+                            if res.exists {
+                                display.addAttribute(.link, value: "detdoc://\(res.docPath)", range: span.range)
+                            }
+                        } else if res.exists {
+                            // Collapsed existing link → replace entire span with a Liquid Glass bubble.
+                            let linkText = (raw.string as NSString).substring(with: textRange)
+                            let docPath = res.docPath
+                            let bubble = DocLinkBubbleAttachment(title: linkText, docPath: docPath) { [weak self] in
+                                self?.onFollowLink(docPath)
+                            }
+                            modifications.append((range: span.range, replacement: NSAttributedString(attachment: bubble)))
+                        } else {
+                            // Collapsed broken link → collapse to red dotted text (no bubble).
+                            display.addAttribute(.foregroundColor, value: NSColor.systemRed, range: span.range)
                             display.addAttribute(.underlineStyle, value: NSUnderlineStyle.patternDot.rawValue | NSUnderlineStyle.single.rawValue, range: span.range)
                             display.addAttribute(.toolTip, value: "Missing: \(res.docsRelativePath)", range: span.range)
+                            let linkLoc = span.range.location, linkEnd = span.range.location + span.range.length
+                            let textLoc = textRange.location, textEnd = textRange.location + textRange.length
+                            modifications.append((range: NSRange(location: textEnd, length: linkEnd - textEnd), replacement: nil))
+                            modifications.append((range: NSRange(location: linkLoc, length: textLoc - linkLoc), replacement: nil))
                         }
-                        if res.exists {
-                            display.addAttribute(.link, value: "detdoc://\(res.docPath)", range: span.range)
-                        }
-                    }
-                    if !caretInLink {
-                        // collapse: delete leading "[" and trailing "](dest)", keep only the link text
+                    } else if !caretInLink {
+                        // Unresolvable destination: collapse to plain text.
                         let linkLoc = span.range.location, linkEnd = span.range.location + span.range.length
                         let textLoc = textRange.location, textEnd = textRange.location + textRange.length
-                        deletes.append(NSRange(location: textEnd, length: linkEnd - textEnd))   // trailing "](dest)"
-                        deletes.append(NSRange(location: linkLoc, length: textLoc - linkLoc))    // leading "["
+                        modifications.append((range: NSRange(location: textEnd, length: linkEnd - textEnd), replacement: nil))
+                        modifications.append((range: NSRange(location: linkLoc, length: textLoc - linkLoc), replacement: nil))
                     }
                 }
             }
-            // Delete highest-offset-first so earlier paragraph-local offsets stay valid.
-            for r in deletes.sorted(by: { $0.location > $1.location }) { display.deleteCharacters(in: r) }
+            // Apply highest-offset-first so earlier paragraph-local offsets stay valid.
+            for mod in modifications.sorted(by: { $0.range.location > $1.range.location }) {
+                if let replacement = mod.replacement {
+                    display.replaceCharacters(in: mod.range, with: replacement)
+                } else {
+                    display.deleteCharacters(in: mod.range)
+                }
+            }
             return NSTextParagraph(attributedString: display)
         }
 
