@@ -12,7 +12,7 @@ struct DocLinkSuggestionsView: View {
                     .padding(.horizontal, 12).padding(.vertical, 8)
             } else {
                 VStack(alignment: .leading, spacing: 2) {
-                    ForEach(Array(model.items.enumerated()), id: \.offset) { i, c in
+                    ForEach(Array(model.items.enumerated()), id: \.element.docsRelativePath) { i, c in
                         row(c, selected: i == model.selectedIndex)
                             .contentShape(Rectangle())
                             .onTapGesture { onPick(i) }
