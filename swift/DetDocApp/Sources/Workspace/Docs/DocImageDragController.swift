@@ -11,6 +11,9 @@ final class DocImageDragController: NSObject {
     private weak var editor: DocEditorViewModel?
     private weak var hostingView: NSView?
     private var indicator: NSView?
+    private var liveSourceIndex: Int?
+    private var clickRecognizer: NSClickGestureRecognizer?
+    private var panRecognizer: NSPanGestureRecognizer?
 
     init(hostingView: NSView, onOpen: @escaping () -> Void, sourceIndex: Int, editor: DocEditorViewModel) {
         self.hostingView = hostingView
@@ -18,9 +21,11 @@ final class DocImageDragController: NSObject {
         self.sourceIndex = sourceIndex
         self.editor = editor
         super.init()
-
         let click = NSClickGestureRecognizer(target: self, action: #selector(handleClick))
         let pan = NSPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
+        self.clickRecognizer = click
+        self.panRecognizer = pan
+        click.delegate = self
         hostingView.addGestureRecognizer(click)
         hostingView.addGestureRecognizer(pan)
     }
@@ -41,6 +46,7 @@ final class DocImageDragController: NSObject {
         switch g.state {
         case .began:
             hostingView?.alphaValue = 0.4
+            liveSourceIndex = currentSourceIndex(in: tv)
             if let target = targetBoundary(in: tv, at: g.location(in: tv)) {
                 positionIndicator(in: tv, atBoundary: target)
             }
@@ -68,6 +74,7 @@ final class DocImageDragController: NSObject {
 
     private func positionIndicator(in tv: NSTextView, atBoundary boundary: Int) {
         var rect = tv.firstRect(forCharacterRange: NSRange(location: boundary, length: 0), actualRange: nil)
+        if rect == .zero { return }   // no glyph rect (e.g. document end) — skip
         if let win = tv.window {
             rect = win.convertFromScreen(rect)
             rect = tv.convert(rect, from: nil)
@@ -87,8 +94,9 @@ final class DocImageDragController: NSObject {
     }
 
     private func commitMove(in tv: NSTextView, toBoundary target: Int) {
+        let srcIndex = liveSourceIndex ?? sourceIndex
         guard let editor,
-              let move = ParagraphMover.move(in: tv.string, lineContaining: sourceIndex, toBoundary: target)
+              let move = ParagraphMover.move(in: tv.string, lineContaining: srcIndex, toBoundary: target)
         else { return }
         let full = NSRange(location: 0, length: (tv.string as NSString).length)
         guard tv.shouldChangeText(in: full, replacementString: move.text) else { return }
@@ -103,5 +111,27 @@ final class DocImageDragController: NSObject {
         indicator?.removeFromSuperview()
         indicator = nil
         hostingView?.alphaValue = 1.0
+        liveSourceIndex = nil
+    }
+
+    /// The preview stays in place during a drag, so its current frame maps to the
+    /// token's LIVE backing index — robust against edits made above it since the
+    /// provider was built (the cached sourceIndex can go stale).
+    private func currentSourceIndex(in tv: NSTextView) -> Int {
+        guard let host = hostingView else { return sourceIndex }
+        let ns = tv.string as NSString
+        guard ns.length > 0 else { return sourceIndex }
+        let frame = host.convert(host.bounds, to: tv)
+        let point = NSPoint(x: frame.midX, y: frame.midY)
+        return max(0, min(tv.characterIndexForInsertion(at: point), ns.length - 1))
+    }
+}
+
+extension DocImageDragController: NSGestureRecognizerDelegate {
+    // The click should only fire when the pan does NOT begin, so a real drag never
+    // also triggers Quick Look.
+    func gestureRecognizer(_ gestureRecognizer: NSGestureRecognizer,
+                           shouldRequireFailureOf other: NSGestureRecognizer) -> Bool {
+        gestureRecognizer === clickRecognizer && other === panRecognizer
     }
 }
