@@ -3,6 +3,9 @@ import Testing
 @testable import DetDoc
 @testable import DetDocCore
 
+// VMGitFixture.deinit deletes the temp directory, so callers MUST keep `fx` alive
+// (bound to a named constant + `withExtendedLifetime(fx) {}` at the end of the test)
+// until every filesystem operation has completed.
 @MainActor
 private func makeVM() async throws -> (VMGitFixture, DocsTreeViewModel) {
     let fx = try await VMGitFixture()
@@ -14,10 +17,11 @@ private func makeVM() async throws -> (VMGitFixture, DocsTreeViewModel) {
 
 @MainActor
 @Test func refreshExposesDocsContentsAtTopLevel() async throws {
-    let (_, vm) = try await makeVM()
+    let (fx, vm) = try await makeVM()
     // The single "docs" root is unwrapped: starter docs/ contents are top-level.
     #expect(vm.nodes.contains { $0.name == "idea.md" })
     #expect(vm.nodes.contains { $0.name == "features" && $0.isDirectory })
+    withExtendedLifetime(fx) {}
 }
 
 @MainActor
@@ -28,66 +32,74 @@ private func makeVM() async throws -> (VMGitFixture, DocsTreeViewModel) {
     #expect(try String(contentsOf: fx.root.appendingPathComponent("docs/notes.md"), encoding: .utf8).contains("notes"))
     #expect(vm.nodes.contains { $0.name == "notes.md" })
     #expect(vm.error == nil)
+    withExtendedLifetime(fx) {}
 }
 
 @MainActor
 @Test func newFileInSubfolderLandsThere() async throws {
-    let (_, vm) = try await makeVM()
+    let (fx, vm) = try await makeVM()
     let path = vm.newFile(name: "todo.md", in: "docs/features")
     #expect(path == "docs/features/todo.md")
+    withExtendedLifetime(fx) {}
 }
 
 @MainActor
 @Test func newFolderCreatesEmptyDirectoryNode() async throws {
-    let (_, vm) = try await makeVM()
+    let (fx, vm) = try await makeVM()
     let path = vm.newFolder(name: "drafts", in: "docs")
     #expect(path == "docs/drafts")
     let drafts = try #require(vm.nodes.first { $0.name == "drafts" })
     #expect(drafts.isDirectory)
     #expect(drafts.children == [])
+    withExtendedLifetime(fx) {}
 }
 
 @MainActor
 @Test func duplicateCreateSetsError() async throws {
-    let (_, vm) = try await makeVM()
+    let (fx, vm) = try await makeVM()
     let path = vm.newFile(name: "idea", in: "docs")   // docs/idea.md already exists
     #expect(path == nil)
     #expect(vm.error?.code == "DOC_ALREADY_EXISTS")
     vm.dismissError()
     #expect(vm.error == nil)
+    withExtendedLifetime(fx) {}
 }
 
 @MainActor
 @Test func renameFileKeepsParentAndReturnsNewPath() async throws {
-    let (_, vm) = try await makeVM()
+    let (fx, vm) = try await makeVM()
     let newPath = vm.rename("docs/idea.md", to: "concept")
     #expect(newPath == "docs/concept.md")
     #expect(vm.nodes.contains { $0.name == "concept.md" })
     #expect(vm.nodes.contains { $0.name == "idea.md" } == false)
+    withExtendedLifetime(fx) {}
 }
 
 @MainActor
 @Test func renameDirectoryReturnsNewPath() async throws {
-    let (_, vm) = try await makeVM()
+    let (fx, vm) = try await makeVM()
     let newPath = vm.rename("docs/features", to: "specs")
     #expect(newPath == "docs/specs")
     #expect(vm.isDirectory("docs/specs"))
+    withExtendedLifetime(fx) {}
 }
 
 @MainActor
 @Test func deleteRemovesNode() async throws {
-    let (_, vm) = try await makeVM()
+    let (fx, vm) = try await makeVM()
     vm.delete("docs/idea.md")
     #expect(vm.nodes.contains { $0.name == "idea.md" } == false)
     #expect(vm.error == nil)
+    withExtendedLifetime(fx) {}
 }
 
 @MainActor
 @Test func directoryForNewEntryResolvesFromSelection() async throws {
-    let (_, vm) = try await makeVM()
+    let (fx, vm) = try await makeVM()
     #expect(vm.directoryForNewEntry(selection: nil) == "docs")
     #expect(vm.directoryForNewEntry(selection: "docs/features") == "docs/features")     // directory selected
     #expect(vm.directoryForNewEntry(selection: "docs/idea.md") == "docs")               // file -> its parent
+    withExtendedLifetime(fx) {}
 }
 
 @Test func remapAfterRenameHandlesSelfAndDescendants() {
