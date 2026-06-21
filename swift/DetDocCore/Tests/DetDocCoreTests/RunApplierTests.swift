@@ -62,3 +62,15 @@ private func seedSavedRun(_ fx: GitFixture, autoCommitConfig: Bool = true) async
     await #expect { _ = try await RunApplier().apply(root: fx.root, runId: manifest.runId, autoCommit: true) }
         throws: { ($0 as? DetDocError)?.code == "APPLY_PREIMAGE_MISMATCH" }
 }
+
+/// G1: apply must stage everything (`add -A`) so the commit captures not only the approved
+/// targets but also the `.gitignore` entries it manages (and any post-apply-validation
+/// changes). After an auto-committed apply the working tree must be clean — otherwise the
+/// `.gitignore` written by `GitignoreManager` is silently left uncommitted.
+@Test func applyLeavesWorkingTreeCleanByStagingAll() async throws {
+    let fx = try await GitFixture()
+    let runId = try await seedSavedRun(fx)
+    _ = try await RunApplier().apply(root: fx.root, runId: runId, autoCommit: true)
+    let dirty = try await fx.repo.statusPorcelain()
+    #expect(dirty.isEmpty, "working tree dirty after apply: \(dirty.map { "\($0.status) \($0.path)" })")
+}

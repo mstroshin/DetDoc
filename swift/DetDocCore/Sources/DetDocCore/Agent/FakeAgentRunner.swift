@@ -18,6 +18,9 @@ public struct FakeAgentRunner: AgentRunner {
     }
 
     public func implement(_ request: ImplementRequest) async throws -> AgentRunResult {
+        guard request.approvedTargets.contains(target) else {
+            throw DetDocError("FAKE_UNAPPROVED_WRITE", "FakeAgentRunner attempted unapproved write: \(target)")
+        }
         try writeTarget(into: request.cwd)
         request.progress?(.write(path: target))
         return AgentRunResult()

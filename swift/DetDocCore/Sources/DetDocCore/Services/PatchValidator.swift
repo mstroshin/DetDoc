@@ -9,6 +9,7 @@ public enum PatchValidator {
             if policy.isDenied(path) { throw DetDocError("PATCH_DENIED_PATH", path) }
             if policy.isDoc(path) { throw DetDocError("PATCH_DOC_PATH", path) }
             if !approvedTargets.contains(path) { throw DetDocError("PATCH_UNAPPROVED_PATH", path) }
+            if path.hasPrefix(".detdoc/runs/") { throw DetDocError("PATCH_ARTIFACT_CHANGE", path) }
         }
     }
 }

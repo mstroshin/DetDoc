@@ -50,3 +50,15 @@ import Testing
     #expect { try PatchValidator.validatePaths(patch, approvedTargets: ["docs/idea.md"], config: .default) }
         throws: { ($0 as? DetDocError)?.code == "PATCH_DOC_PATH" }
 }
+
+/// G3: even an *approved* patch path must be rejected when it touches run artifacts under
+/// `.detdoc/runs/` (parity with the TS PATCH_ARTIFACT_CHANGE guard). Such a path is neither
+/// denied, doc, nor unapproved here, so without the artifact guard it would slip through.
+@Test func runArtifactPathIsRejected() {
+    let patch = """
+    --- a/.detdoc/runs/run-1/changes.patch
+    +++ b/.detdoc/runs/run-1/changes.patch
+    """
+    #expect { try PatchValidator.validatePaths(patch, approvedTargets: [".detdoc/runs/run-1/changes.patch"], config: .default) }
+        throws: { ($0 as? DetDocError)?.code == "PATCH_ARTIFACT_CHANGE" }
+}

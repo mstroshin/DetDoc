@@ -215,7 +215,7 @@ public actor DetDocEngine {
             emit(.progress(phase: .cleanupRun, message: "Removing run artifacts"))
         }
         emit(.progress(phase: .commit, message: "Committing applied changes"))
-        try await RunApplier().commitOrStage(repo: mainRepo, approvedTargets: approvedTargets, runId: manifest.runId, autoCommit: config.apply.autoCommit, store: store)
+        try await RunApplier().commitOrStage(repo: mainRepo, runId: manifest.runId, autoCommit: config.apply.autoCommit, store: store)
         return WorktreeOutcome(result: RunFlowResult(runId: manifest.runId, applied: true, patch: patch),
                                keepWorktree: keepWorktree)
     }

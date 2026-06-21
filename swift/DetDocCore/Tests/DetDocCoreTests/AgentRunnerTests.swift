@@ -18,3 +18,17 @@ import Testing
     let written = try String(contentsOf: tmp.url.appendingPathComponent("src/app.swift"), encoding: .utf8)
     #expect(written == "let x = 2\n")
 }
+
+/// G2: the fake runner must refuse to write a target that is not in the approved set, so a
+/// flow test can never accidentally simulate an out-of-scope edit (parity with the TS
+/// FakeAgentRunner's unapproved-write guard).
+@Test func fakeAgentRejectsUnapprovedWrite() async throws {
+    let tmp = TempDir()
+    let agent = FakeAgentRunner(target: "src/secret.swift", content: "x\n")
+    await #expect {
+        _ = try await agent.implement(ImplementRequest(
+            mode: .run, input: "diff", config: .default, cwd: tmp.url,
+            approvedPlan: ProposedPlan(summary: "s", changes: [], risk: "low"),
+            approvedTargets: ["src/app.swift"], progress: nil))
+    } throws: { ($0 as? DetDocError)?.code == "FAKE_UNAPPROVED_WRITE" }
+}

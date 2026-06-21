@@ -19,7 +19,7 @@ public struct RunApplier: Sendable {
 
         try await repo.applyPatch(patch)
         try await runPostApplyValidation(root: root, store: store, runId: runId)
-        try await commitOrStage(repo: repo, approvedTargets: manifest.approvedTargets, runId: runId, autoCommit: autoCommit, store: store)
+        try await commitOrStage(repo: repo, runId: runId, autoCommit: autoCommit, store: store)
         return RunFlowResult(runId: runId, applied: true, patch: patch)
     }
 
@@ -35,11 +35,18 @@ public struct RunApplier: Sendable {
         try store.writeText(runId, "post-apply-validation.log", log)
     }
 
-    func commitOrStage(repo: GitRepository, approvedTargets: [String], runId: String, autoCommit: Bool, store: ArtifactStore) async throws {
+    func commitOrStage(repo: GitRepository, runId: String, autoCommit: Bool, store: ArtifactStore) async throws {
         try GitignoreManager.ensureManagedEntries(root: repo.cwd)
-        _ = try await repo.git(["add", "--"] + approvedTargets)
+        // Stage the whole tree so the commit captures the managed `.gitignore` and any files
+        // touched by post-apply validation, not just the approved targets.
+        _ = try await repo.git(["add", "-A", "--", "."])
         if autoCommit {
             _ = try await repo.git(["commit", "-m", "DetDoc apply \(runId)"])
+            let dirty = try await repo.statusPorcelain()
+            if !dirty.isEmpty {
+                let detail = dirty.map { "\($0.status) \($0.path)" }.joined(separator: ", ")
+                throw DetDocError("GIT_NOT_CLEAN_AFTER_APPLY", "Git working tree is not clean after DetDoc apply: \(detail)")
+            }
             try store.deleteRun(runId)
         }
     }
