@@ -18,9 +18,26 @@ struct LivePreviewTextView: NSViewRepresentable {
     }
 
     func makeNSView(context: Context) -> NSScrollView {
-        let scroll = NSTextView.scrollableTextView()
+        let scroll = NSScrollView()
         scroll.hasVerticalScroller = true
-        let tv = scroll.documentView as! NSTextView
+        scroll.drawsBackground = true
+
+        // TextKit 2 stack so the content-storage delegate (live preview) works.
+        let container = NSTextContainer(size: CGSize(width: 0, height: CGFloat.greatestFiniteMagnitude))
+        container.widthTracksTextView = true
+        let layoutManager = NSTextLayoutManager()
+        layoutManager.textContainer = container
+        let contentStorage = NSTextContentStorage()
+        contentStorage.addTextLayoutManager(layoutManager)
+
+        let tv = ImageDropTextView(frame: .zero, textContainer: container)
+        tv.coordinator = context.coordinator
+        tv.minSize = NSSize(width: 0, height: 0)
+        tv.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        tv.isVerticallyResizable = true
+        tv.isHorizontallyResizable = false
+        tv.autoresizingMask = [.width]
+
         tv.delegate = context.coordinator
         tv.isRichText = false
         tv.allowsUndo = true
@@ -31,9 +48,11 @@ struct LivePreviewTextView: NSViewRepresentable {
         tv.isAutomaticDashSubstitutionEnabled = false
         tv.isAutomaticLinkDetectionEnabled = false
         context.coordinator.textView = tv
-        if let tcs = tv.textLayoutManager?.textContentManager as? NSTextContentStorage {
-            tcs.delegate = context.coordinator
-        }
+        contentStorage.delegate = context.coordinator
+
+        tv.registerForDraggedTypes([.fileURL, .tiff, .png])
+
+        scroll.documentView = tv
         return scroll
     }
 
@@ -217,6 +236,76 @@ struct LivePreviewTextView: NSViewRepresentable {
             panel.dataSource = quickLook
             panel.makeKeyAndOrderFront(nil)
             panel.reloadData()
+        }
+
+        // MARK: - Image drop / paste
+
+        /// Returns true if the drag carried image file URLs or raster data that we
+        /// imported and inserted as @-tokens.
+        func handleImageDrop(_ sender: any NSDraggingInfo, into tv: NSTextView) -> Bool {
+            guard let docPath = editor.selectedPath else { return false }
+            let pb = sender.draggingPasteboard
+            let point = tv.convert(sender.draggingLocation, from: nil)
+            let charIndex = tv.characterIndexForInsertion(at: point)
+
+            var tokens: [String] = []
+            let opts: [NSPasteboard.ReadingOptionKey: Any] = [.urlReadingFileURLsOnly: true]
+            if let urls = pb.readObjects(forClasses: [NSURL.self], options: opts) as? [URL] {
+                for url in urls where ImageRefScanner.isImagePath(url.lastPathComponent) {
+                    if let token = try? imageImporter.importFile(at: url, forDoc: docPath) { tokens.append(token) }
+                }
+            }
+            if tokens.isEmpty, let data = imageData(from: pb),
+               let token = try? imageImporter.importData(data, basename: Self.generatedBasename(), forDoc: docPath) {
+                tokens.append(token)
+            }
+            guard !tokens.isEmpty else { return false }
+            insertImageTokens(tokens, at: charIndex, in: tv)
+            return true
+        }
+
+        /// Returns true if the pasteboard held image data (and no plain text) that we
+        /// imported and inserted at the caret.
+        func handleImagePaste(into tv: NSTextView) -> Bool {
+            guard let docPath = editor.selectedPath else { return false }
+            let pb = NSPasteboard.general
+            if pb.string(forType: .string) != nil { return false }   // let normal text paste win
+            guard let data = imageData(from: pb),
+                  let token = try? imageImporter.importData(data, basename: Self.generatedBasename(), forDoc: docPath)
+            else { return false }
+            insertImageTokens([token], at: tv.selectedRange().location, in: tv)
+            return true
+        }
+
+        private func imageData(from pb: NSPasteboard) -> Data? {
+            if let png = pb.data(forType: .png) { return png }
+            if let tiff = pb.data(forType: .tiff), let rep = NSBitmapImageRep(data: tiff),
+               let png = rep.representation(using: .png, properties: [:]) { return png }
+            return nil
+        }
+
+        private func insertImageTokens(_ tokens: [String], at index: Int, in tv: NSTextView) {
+            let ns = tv.string as NSString
+            let loc = max(0, min(index, ns.length))
+            let newline = UInt16(UnicodeScalar("\n").value)
+            let needsLeading = loc > 0 && ns.character(at: loc - 1) != newline
+            let needsTrailing = loc < ns.length && ns.character(at: loc) != newline
+            var text = tokens.map { "@\($0)" }.joined(separator: "\n")
+            if needsLeading { text = "\n" + text }
+            if needsTrailing { text += "\n" }
+            let range = NSRange(location: loc, length: 0)
+            if tv.shouldChangeText(in: range, replacementString: text) {
+                tv.textStorage?.replaceCharacters(in: range, with: text)
+                tv.didChangeText()
+                tv.setSelectedRange(NSRange(location: loc + (text as NSString).length, length: 0))
+            }
+            editor.edit(tv.string)
+        }
+
+        private static func generatedBasename() -> String {
+            let f = DateFormatter()
+            f.dateFormat = "yyyyMMdd-HHmmss"
+            return "image-\(f.string(from: Date()))"
         }
 
         // MARK: - Completion logic
