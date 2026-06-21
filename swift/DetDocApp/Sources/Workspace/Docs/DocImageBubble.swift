@@ -6,7 +6,6 @@ import SwiftUI
 struct DocImageView: View {
     let image: NSImage
     let size: CGSize
-    let onOpen: () -> Void
 
     var body: some View {
         Image(nsImage: image)
@@ -14,9 +13,7 @@ struct DocImageView: View {
             .frame(width: size.width, height: size.height)
             .clipShape(RoundedRectangle(cornerRadius: 6))
             .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color(nsColor: .separatorColor), lineWidth: 1))
-            .contentShape(Rectangle())
-            .onTapGesture { onOpen() }
-            .help("Click to open full size")
+            .help("Drag to move • click to open full size")
     }
 }
 
@@ -24,15 +21,17 @@ struct DocImageView: View {
 
 // Same isolation strategy as DocLinkBubbleAttachment: the attachment is built on the
 // main thread by the @MainActor content-storage delegate and only used on main.
-// `url` is Sendable; `onOpen` is a non-Sendable closure marked nonisolated(unsafe)
-// because it is exclusively invoked on the main thread (SwiftUI onTapGesture).
+// `url` is Sendable; `onOpen` and `editor` are non-Sendable values marked
+// nonisolated(unsafe) because they are exclusively used on the main thread.
 final class DocImageAttachment: NSTextAttachment {
     let url: URL
     nonisolated(unsafe) let onOpen: () -> Void
+    nonisolated(unsafe) let editor: DocEditorViewModel
 
     @MainActor
-    init(url: URL, onOpen: @escaping @MainActor () -> Void) {
+    init(url: URL, editor: DocEditorViewModel, onOpen: @escaping @MainActor () -> Void) {
         self.url = url
+        self.editor = editor
         self.onOpen = onOpen
         super.init(data: nil, ofType: nil)
     }
@@ -65,7 +64,10 @@ private struct MainThreadOnly<T>: @unchecked Sendable { let value: T }
 final class DocImageProvider: NSTextAttachmentViewProvider {
     private let image: NSImage?
     private let onOpen: MainThreadOnly<() -> Void>
+    private let editor: MainThreadOnly<DocEditorViewModel?>
+    private let sourceIndex: Int
     private let containerWidth: CGFloat
+    private var dragController: DocImageDragController?
 
     override init(
         textAttachment: NSTextAttachment,
@@ -76,6 +78,12 @@ final class DocImageProvider: NSTextAttachmentViewProvider {
         let a = textAttachment as? DocImageAttachment
         self.image = a.flatMap { NSImage(contentsOf: $0.url) }
         self.onOpen = MainThreadOnly(value: a?.onOpen ?? {})
+        self.editor = MainThreadOnly(value: a?.editor)
+        if let cm = textLayoutManager?.textContentManager {
+            self.sourceIndex = cm.offset(from: cm.documentRange.location, to: location)
+        } else {
+            self.sourceIndex = 0
+        }
         let cw = textLayoutManager?.textContainer?.size.width ?? 480
         self.containerWidth = (cw.isFinite && cw > 0) ? cw : 480
         super.init(textAttachment: textAttachment, parentView: parentView,
@@ -97,14 +105,20 @@ final class DocImageProvider: NSTextAttachmentViewProvider {
 
     override func loadView() {
         let size = displaySize()
-        let follow = onOpen
         let providerBox = MainThreadOnly(value: self)
         if let image {
             let imageBox = MainThreadOnly(value: image)
+            let follow = onOpen
+            let ed = editor
+            let idx = sourceIndex
             MainActor.assumeIsolated {
-                providerBox.value.view = NSHostingView(
-                    rootView: DocImageView(image: imageBox.value, size: size, onOpen: follow.value)
-                )
+                let host = NSHostingView(rootView: DocImageView(image: imageBox.value, size: size))
+                providerBox.value.view = host
+                if let editor = ed.value {
+                    providerBox.value.dragController = DocImageDragController(
+                        hostingView: host, onOpen: follow.value, sourceIndex: idx, editor: editor
+                    )
+                }
             }
         } else {
             MainActor.assumeIsolated { providerBox.value.view = NSView() }

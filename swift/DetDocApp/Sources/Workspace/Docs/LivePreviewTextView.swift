@@ -174,7 +174,7 @@ struct LivePreviewTextView: NSViewRepresentable {
                 if let url = imageImporter.resolve(img.path) {
                     display.addAttribute(.foregroundColor, value: NSColor.linkColor, range: img.range)
                     if !caretInToken {
-                        let attachment = DocImageAttachment(url: url) { [weak self] in
+                        let attachment = DocImageAttachment(url: url, editor: editor) { [weak self] in
                             self?.openQuickLook(url)
                         }
                         modifications.append((range: img.range, replacement: NSAttributedString(attachment: attachment)))
