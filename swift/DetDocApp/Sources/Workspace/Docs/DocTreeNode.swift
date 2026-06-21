@@ -1,14 +1,14 @@
 import Foundation
 
-struct DocTreeNode: Identifiable, Hashable {
-    let id: String          // relative path: "docs/guide/intro.md" or "docs/guide"
-    let name: String        // last path component: "intro.md" / "guide"
-    let isDirectory: Bool
-    var children: [DocTreeNode]?   // nil for files; [] for an empty directory
+public struct DocTreeNode: Identifiable, Hashable {
+    public let id: String          // relative path: "docs/guide/intro.md" or "docs/guide"
+    public let name: String        // last path component: "intro.md" / "guide"
+    public let isDirectory: Bool
+    public var children: [DocTreeNode]?   // nil for files; [] for an empty directory
 }
 
-enum DocTreeBuilder {
-    static func build(files: [String], directories: [String]) -> [DocTreeNode] {
+public enum DocTreeBuilder {
+    public static func build(files: [String], directories: [String]) -> [DocTreeNode] {
         let fileSet = Set(files)
         var dirSet = Set<String>()
 
