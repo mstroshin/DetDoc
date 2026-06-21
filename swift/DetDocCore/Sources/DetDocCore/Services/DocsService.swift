@@ -84,7 +84,8 @@ public struct DocsService: Sendable {
 
     public func createDirectory(_ path: String) throws {
         let url = root.appendingPathComponent(path)
-        if FileManager.default.fileExists(atPath: url.path) {
+        var isDir: ObjCBool = false
+        if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue {
             throw DetDocError("DOC_ALREADY_EXISTS", path)
         }
         do {

@@ -52,3 +52,17 @@ private func docsService() -> (TempDir, DocsService) {
     #expect(isDir.boolValue)
     #expect(throws: DetDocError.self) { try svc.createDirectory("docs/new") }
 }
+
+@Test func createDirectoryReportsWriteFailedWhenFileAtPath() throws {
+    let (tmp, svc) = docsService()
+    try FileManager.default.createDirectory(at: tmp.url.appendingPathComponent("docs"), withIntermediateDirectories: true)
+    try "x".write(to: tmp.url.appendingPathComponent("docs/thing"), atomically: true, encoding: .utf8)
+    var caughtError: DetDocError? = nil
+    do {
+        try svc.createDirectory("docs/thing")
+    } catch let error as DetDocError {
+        caughtError = error
+    }
+    let error = try #require(caughtError)
+    #expect(error.code == "DOC_WRITE_FAILED")
+}
