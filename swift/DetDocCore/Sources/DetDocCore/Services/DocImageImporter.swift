@@ -42,6 +42,8 @@ public struct DocImageImporter: Sendable {
     public func resolve(_ tokenPath: String) -> URL? {
         let clean = tokenPath.hasPrefix("/") ? String(tokenPath.dropFirst()) : tokenPath
         guard !clean.isEmpty else { return nil }
+        // Keep resolution bounded to the docs subtree — reject path traversal.
+        guard !clean.split(separator: "/").contains("..") else { return nil }
         let url = root.appendingPathComponent("docs").appendingPathComponent(clean)
         return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }

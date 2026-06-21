@@ -58,3 +58,19 @@ import Testing
     #expect(url != nil)
     #expect(url?.lastPathComponent == "window.png")
 }
+
+@Test func resolveRejectsPathTraversal() throws {
+    let tmp = TempDir()
+    let importer = DocImageImporter(root: tmp.url)
+    // even if a file exists outside docs/, a traversal token must not resolve to it
+    let outside = tmp.url.appendingPathComponent("secret.png")
+    try Data([0x89]).write(to: outside)
+    #expect(importer.resolve("guides/../../secret.png") == nil)
+    #expect(importer.resolve("..") == nil)
+}
+
+@Test func resolveRejectsEmptyToken() {
+    let tmp = TempDir()
+    let importer = DocImageImporter(root: tmp.url)
+    #expect(importer.resolve("") == nil)
+}
