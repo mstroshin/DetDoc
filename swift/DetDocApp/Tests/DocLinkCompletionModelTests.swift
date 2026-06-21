@@ -15,7 +15,7 @@ private let cands = [
     #expect(m.items.count == 2)
     m.moveDown()
     let ins = m.commit()
-    #expect(ins == DocLinkCompletionModel.Insertion(text: "[setup](guides/setup.md)", range: NSRange(location: 0, length: 3)))
+    #expect(ins == DocLinkCompletionModel.Insertion(text: "@guides/setup", range: NSRange(location: 0, length: 3)))
     #expect(m.isActive == false)
 }
 

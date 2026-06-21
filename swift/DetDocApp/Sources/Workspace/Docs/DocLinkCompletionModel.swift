@@ -44,6 +44,6 @@ public final class DocLinkCompletionModel {
         guard isActive, items.indices.contains(selectedIndex) else { return nil }
         let c = items[selectedIndex]
         isActive = false
-        return Insertion(text: DocLink.make(name: c.name, docsRelativePath: c.docsRelativePath), range: replaceRange)
+        return Insertion(text: DocLink.make(docsRelativePath: c.docsRelativePath), range: replaceRange)
     }
 }

@@ -74,7 +74,8 @@ struct LivePreviewTextView: NSViewRepresentable {
                   range.location + range.length <= storage.length else { return nil }
             let raw = storage.attributedSubstring(from: range)
             let spans = MarkdownStyleScanner.scan(raw.string)
-            if spans.isEmpty { return nil }   // plain paragraph -> default rendering
+            let refs = DocRefScanner.scan(raw.string)
+            if spans.isEmpty && refs.isEmpty { return nil }   // plain paragraph -> default rendering
 
             let display = NSMutableAttributedString(attributedString: raw)
             let full = NSRange(location: 0, length: (raw.string as NSString).length)
@@ -90,6 +91,7 @@ struct LivePreviewTextView: NSViewRepresentable {
             // nil replacement = delete; non-nil = replace with attachment.
             var modifications: [(range: NSRange, replacement: NSAttributedString?)] = []
 
+            // --- Heading / bold / italic ---
             for span in spans {
                 switch span.kind {
                 case let .heading(level):
@@ -101,49 +103,40 @@ struct LivePreviewTextView: NSViewRepresentable {
                     if let it = NSFontManager.shared.convert(.monospacedSystemFont(ofSize: 13, weight: .regular), toHaveTrait: .italicFontMask) as NSFont? {
                         display.addAttribute(.font, value: it, range: span.range)
                     }
-                case let .link(destination, textRange):
-                    let absStart = paraStart + span.range.location
-                    let absEnd = absStart + span.range.length
-                    let caretInLink = caret >= absStart && caret < absEnd
-                    if let res = resolver.resolve(destination) {
-                        if caretInLink {
-                            // Caret inside link: show raw markdown with styling.
-                            let color: NSColor = res.exists ? .linkColor : .systemRed
-                            display.addAttribute(.foregroundColor, value: color, range: span.range)
-                            if !res.exists {
-                                display.addAttribute(.underlineStyle, value: NSUnderlineStyle.patternDot.rawValue | NSUnderlineStyle.single.rawValue, range: span.range)
-                                display.addAttribute(.toolTip, value: "Missing: \(res.docsRelativePath)", range: span.range)
-                            }
-                            if res.exists {
-                                display.addAttribute(.link, value: "detdoc://\(res.docPath)", range: span.range)
-                            }
-                        } else if res.exists {
-                            // Collapsed existing link → replace entire span with a Liquid Glass bubble.
-                            let linkText = (raw.string as NSString).substring(with: textRange)
-                            let docPath = res.docPath
-                            let bubble = DocLinkBubbleAttachment(title: linkText) { [weak self] in
-                                self?.onFollowLink(docPath)
-                            }
-                            modifications.append((range: span.range, replacement: NSAttributedString(attachment: bubble)))
-                        } else {
-                            // Collapsed broken link → collapse to red dotted text (no bubble).
-                            display.addAttribute(.foregroundColor, value: NSColor.systemRed, range: span.range)
-                            display.addAttribute(.underlineStyle, value: NSUnderlineStyle.patternDot.rawValue | NSUnderlineStyle.single.rawValue, range: span.range)
-                            display.addAttribute(.toolTip, value: "Missing: \(res.docsRelativePath)", range: span.range)
-                            let linkLoc = span.range.location, linkEnd = span.range.location + span.range.length
-                            let textLoc = textRange.location, textEnd = textRange.location + textRange.length
-                            modifications.append((range: NSRange(location: textEnd, length: linkEnd - textEnd), replacement: nil))
-                            modifications.append((range: NSRange(location: linkLoc, length: textLoc - linkLoc), replacement: nil))
-                        }
-                    } else if !caretInLink {
-                        // Unresolvable destination: collapse to plain text.
-                        let linkLoc = span.range.location, linkEnd = span.range.location + span.range.length
-                        let textLoc = textRange.location, textEnd = textRange.location + textRange.length
-                        modifications.append((range: NSRange(location: textEnd, length: linkEnd - textEnd), replacement: nil))
-                        modifications.append((range: NSRange(location: linkLoc, length: textLoc - linkLoc), replacement: nil))
-                    }
                 }
             }
+
+            // --- @-token links ---
+            for ref in refs {
+                let absStart = paraStart + ref.range.location
+                let absEnd = absStart + ref.range.length
+                let caretInLink = caret >= absStart && caret < absEnd
+
+                if let res = resolver.resolve(ref.path) {
+                    if res.exists {
+                        // Always apply link color + .link attribute (so cmd-click works on revealed tokens too).
+                        display.addAttribute(.foregroundColor, value: NSColor.linkColor, range: ref.range)
+                        display.addAttribute(.link, value: "detdoc://\(res.docPath)", range: ref.range)
+
+                        if !caretInLink {
+                            // Collapse to a Liquid Glass bubble.
+                            let docName = String(ref.path.split(separator: "/").last ?? Substring(ref.path))
+                            let docPath = res.docPath
+                            let bubble = DocLinkBubbleAttachment(title: docName) { [weak self] in
+                                self?.onFollowLink(docPath)
+                            }
+                            modifications.append((range: ref.range, replacement: NSAttributedString(attachment: bubble)))
+                        }
+                    } else {
+                        // Broken token: red dotted — no bubble, regardless of caret.
+                        display.addAttribute(.foregroundColor, value: NSColor.systemRed, range: ref.range)
+                        display.addAttribute(.underlineStyle, value: NSUnderlineStyle.patternDot.rawValue | NSUnderlineStyle.single.rawValue, range: ref.range)
+                        display.addAttribute(.toolTip, value: "Missing: \(res.docsRelativePath)", range: ref.range)
+                    }
+                }
+                // If resolver returns nil (empty path), nothing is styled — token stays as-is.
+            }
+
             // Apply highest-offset-first so earlier paragraph-local offsets stay valid.
             for mod in modifications.sorted(by: { $0.range.location > $1.range.location }) {
                 if let replacement = mod.replacement {
@@ -216,26 +209,24 @@ struct LivePreviewTextView: NSViewRepresentable {
             }
             editor.edit(tv.string)
             hidePanel()
-            // Force refresh of the paragraph containing the inserted link so it collapses immediately.
+            // Force refresh of the paragraph containing the inserted token so it collapses immediately.
             let insertEnd = ins.range.location + (ins.text as NSString).length
             refreshCaretParagraphs(old: insertEnd, new: insertEnd)
         }
 
         // MARK: - Refresh helper
 
-        /// Returns the document-absolute NSRange of the link span (if any) that
-        /// contains `caret`, or nil if the caret is not inside a link.
+        /// Returns the document-absolute NSRange of the @-token span (if any) that
+        /// contains `caret`, or nil if the caret is not inside a token.
         private func linkRange(atCaret caret: Int) -> NSRange? {
             guard let storage = textView?.textStorage, caret >= 0, caret <= storage.length else { return nil }
             let ns = storage.string as NSString
             let para = ns.paragraphRange(for: NSRange(location: min(caret, max(0, ns.length - 1)), length: 0))
             let paraStr = ns.substring(with: para)
-            for span in MarkdownStyleScanner.scan(paraStr) {
-                if case .link = span.kind {
-                    let absStart = para.location + span.range.location
-                    let absEnd = absStart + span.range.length
-                    if caret >= absStart && caret < absEnd { return NSRange(location: absStart, length: absEnd - absStart) }
-                }
+            for ref in DocRefScanner.scan(paraStr) {
+                let absStart = para.location + ref.range.location
+                let absEnd = absStart + ref.range.length
+                if caret >= absStart && caret < absEnd { return NSRange(location: absStart, length: absEnd - absStart) }
             }
             return nil
         }

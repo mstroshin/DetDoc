@@ -4,7 +4,6 @@ public enum MarkdownSpanKind: Equatable, Sendable {
     case heading(level: Int)
     case bold
     case italic
-    case link(destination: String, textRange: NSRange)
 }
 
 public struct MarkdownSpan: Equatable, Sendable {
@@ -20,7 +19,6 @@ public enum MarkdownStyleScanner {
         spans.append(contentsOf: headings(ns))
         spans.append(contentsOf: matches(ns, #"\*\*(?:[^*]|\*(?!\*))+\*\*"#, kind: .bold))
         spans.append(contentsOf: matches(ns, #"(?<!\*)\*(?!\*)[^*\n]+\*(?!\*)"#, kind: .italic))
-        spans.append(contentsOf: links(ns))
         return spans
     }
 
@@ -34,16 +32,6 @@ public enum MarkdownStyleScanner {
     private static func matches(_ ns: NSString, _ pattern: String, kind: MarkdownSpanKind) -> [MarkdownSpan] {
         regex(pattern).matches(in: ns as String, range: NSRange(location: 0, length: ns.length))
             .map { MarkdownSpan(range: $0.range, kind: kind) }
-    }
-
-    private static func links(_ ns: NSString) -> [MarkdownSpan] {
-        // [text](dest) not preceded by '!' (which would be an image)
-        regex(#"(?<!\!)\[([^\]]*)\]\(([^)\s]+)\)"#)
-            .matches(in: ns as String, range: NSRange(location: 0, length: ns.length))
-            .map {
-                let dest = ns.substring(with: $0.range(at: 2))
-                return MarkdownSpan(range: $0.range, kind: .link(destination: dest, textRange: $0.range(at: 1)))
-            }
     }
 
     private static func regex(_ pattern: String) -> NSRegularExpression {

@@ -13,8 +13,10 @@ public struct DocLinkResolver: Sendable {
     private let existing: Set<String>
     public init(candidates: Set<String>) { self.existing = candidates }
 
-    public func resolve(_ destination: String) -> Resolution? {
-        guard let target = DocLink.internalTarget(ofDestination: destination) else { return nil }
-        return Resolution(docsRelativePath: target, docPath: "docs/\(target)", exists: existing.contains(target))
+    public func resolve(_ tokenPath: String) -> Resolution? {
+        let path = tokenPath.hasPrefix("/") ? String(tokenPath.dropFirst()) : tokenPath
+        guard !path.isEmpty else { return nil }
+        let docsRel = path + ".md"
+        return Resolution(docsRelativePath: docsRel, docPath: "docs/\(docsRel)", exists: existing.contains(docsRel))
     }
 }
