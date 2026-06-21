@@ -30,6 +30,7 @@ struct LivePreviewTextView: NSViewRepresentable {
     func updateNSView(_ nsView: NSScrollView, context: Context) {
         context.coordinator.editor = editor
         context.coordinator.resolver = resolver
+        context.coordinator.onFollowLink = onFollowLink
         guard let tv = nsView.documentView as? NSTextView else { return }
         if tv.string != editor.source {           // external change (open/clear)
             tv.string = editor.source
@@ -41,7 +42,7 @@ struct LivePreviewTextView: NSViewRepresentable {
     final class Coordinator: NSObject, NSTextViewDelegate {
         var editor: DocEditorViewModel
         var resolver: DocLinkResolver
-        let onFollowLink: (String) -> Void
+        var onFollowLink: (String) -> Void
         weak var textView: NSTextView?
         init(editor: DocEditorViewModel, resolver: DocLinkResolver, onFollowLink: @escaping (String) -> Void) {
             self.editor = editor
@@ -67,6 +68,7 @@ struct LivePreviewTextView: NSViewRepresentable {
                 .foregroundColor: NSColor.textColor,
             ], range: full)
 
+            let styledLinks = MarkdownStyleApplier.styledLinkRanges(spans: spans, caret: caret)
             for span in spans {
                 switch span.kind {
                 case let .heading(level):
@@ -79,7 +81,6 @@ struct LivePreviewTextView: NSViewRepresentable {
                         storage.addAttribute(.font, value: italic, range: span.range)
                     }
                 case let .link(destination, _):
-                    let styledLinks = MarkdownStyleApplier.styledLinkRanges(spans: spans, caret: caret)
                     let isStyled = styledLinks.contains(span)
                     if let res = resolver.resolve(destination) {
                         let color: NSColor = res.exists ? .linkColor : .systemRed
@@ -100,10 +101,12 @@ struct LivePreviewTextView: NSViewRepresentable {
         func textViewDidChangeSelection(_ notification: Notification) { applyStyling() }
 
         func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
-            guard let url = (link as? URL) ?? (link as? String).flatMap(URL.init(string:)),
-                  url.scheme == "detdoc" else { return false }
-            let docPath = String(url.absoluteString.dropFirst("detdoc://".count))
-            onFollowLink(docPath)
+            let raw: String?
+            if let s = link as? String { raw = s }
+            else if let url = link as? URL { raw = url.absoluteString.removingPercentEncoding ?? url.absoluteString }
+            else { raw = nil }
+            guard let s = raw, s.hasPrefix("detdoc://") else { return false }
+            onFollowLink(String(s.dropFirst("detdoc://".count)))
             return true
         }
     }
