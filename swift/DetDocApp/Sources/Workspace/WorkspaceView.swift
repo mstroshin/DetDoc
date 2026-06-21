@@ -41,7 +41,11 @@ struct WorkspaceView: View {
                 .navigationSplitViewColumnWidth(min: 220, ideal: 280, max: 360)
                 .navigationTitle("Docs")
         } detail: {
-            DocEditorScreen(editor: editor, resolver: linkResolver) { docPath in
+            DocEditorScreen(editor: editor, resolver: linkResolver,
+                            candidatesProvider: {
+                                let svc = DocsService(root: root, config: (try? ConfigStore().load(root: root)) ?? .default)
+                                return svc.candidates()
+                            }) { docPath in
                 if !tree.isDirectory(docPath) { selectedDoc = docPath }
             }
         }

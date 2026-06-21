@@ -36,6 +36,8 @@ public final class DocLinkCompletionModel {
     public func moveUp() { if !items.isEmpty { selectedIndex = (selectedIndex - 1 + items.count) % items.count } }
     public func moveDown() { if !items.isEmpty { selectedIndex = (selectedIndex + 1) % items.count } }
 
+    public func selectByTap(_ i: Int) { if items.indices.contains(i) { selectedIndex = i } }
+
     public func cancel() { isActive = false; items = []; query = "" }
 
     public func commit() -> Insertion? {

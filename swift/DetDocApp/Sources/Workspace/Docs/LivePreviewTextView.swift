@@ -5,9 +5,14 @@ import DetDocCore
 struct LivePreviewTextView: NSViewRepresentable {
     @Bindable var editor: DocEditorViewModel
     var resolver: DocLinkResolver
+    var candidatesProvider: () -> [DocCandidate]
     var onFollowLink: (String) -> Void
 
-    func makeCoordinator() -> Coordinator { Coordinator(editor: editor, resolver: resolver, onFollowLink: onFollowLink) }
+    func makeCoordinator() -> Coordinator {
+        Coordinator(editor: editor, resolver: resolver,
+                    candidatesProvider: candidatesProvider,
+                    onFollowLink: onFollowLink)
+    }
 
     func makeNSView(context: Context) -> NSScrollView {
         let scroll = NSTextView.scrollableTextView()
@@ -30,6 +35,7 @@ struct LivePreviewTextView: NSViewRepresentable {
     func updateNSView(_ nsView: NSScrollView, context: Context) {
         context.coordinator.editor = editor
         context.coordinator.resolver = resolver
+        context.coordinator.candidatesProvider = candidatesProvider
         context.coordinator.onFollowLink = onFollowLink
         guard let tv = nsView.documentView as? NSTextView else { return }
         if tv.string != editor.source {           // external change (open/clear)
@@ -42,18 +48,115 @@ struct LivePreviewTextView: NSViewRepresentable {
     final class Coordinator: NSObject, NSTextViewDelegate {
         var editor: DocEditorViewModel
         var resolver: DocLinkResolver
+        var candidatesProvider: () -> [DocCandidate]
         var onFollowLink: (String) -> Void
         weak var textView: NSTextView?
-        init(editor: DocEditorViewModel, resolver: DocLinkResolver, onFollowLink: @escaping (String) -> Void) {
+
+        let completion = DocLinkCompletionModel()
+        private var panel: NSPanel?
+        private var cachedCandidates: [DocCandidate] = []
+
+        init(editor: DocEditorViewModel, resolver: DocLinkResolver,
+             candidatesProvider: @escaping () -> [DocCandidate],
+             onFollowLink: @escaping (String) -> Void) {
             self.editor = editor
             self.resolver = resolver
+            self.candidatesProvider = candidatesProvider
             self.onFollowLink = onFollowLink
         }
+
+        // MARK: - Panel management
+
+        private func showPanel() {
+            let host = NSHostingController(rootView: DocLinkSuggestionsView(model: completion) { [weak self] i in
+                self?.completion.selectByTap(i)
+                self?.commitCompletion()
+            })
+            let p = NSPanel(contentViewController: host)
+            p.styleMask = [.nonactivatingPanel, .borderless]
+            p.isOpaque = false
+            p.backgroundColor = .clear
+            p.hasShadow = true
+            p.level = .popUpMenu
+            panel = p
+        }
+
+        private func positionPanel() {
+            guard let tv = textView, let win = tv.window, let panel else { return }
+            let caret = tv.selectedRange()
+            var rect = tv.firstRect(forCharacterRange: NSRange(location: caret.location, length: 0), actualRange: nil)
+            if rect == .zero {
+                let fallbackLoc = max(0, caret.location - 1)
+                rect = tv.firstRect(forCharacterRange: NSRange(location: fallbackLoc, length: 1), actualRange: nil)
+            }
+            panel.setFrameTopLeftPoint(NSPoint(x: rect.minX, y: rect.minY - 6))
+            if panel.parent == nil { win.addChildWindow(panel, ordered: .above) }
+        }
+
+        private func hidePanel() {
+            if let p = panel { p.parent?.removeChildWindow(p); p.orderOut(nil) }
+            panel = nil
+        }
+
+        // MARK: - Completion logic
+
+        private func updateCompletion() {
+            guard let tv = textView else { return }
+            let cursor = tv.selectedRange().location
+            guard let q = DocLinkCompletion.activeQuery(in: tv.string, cursorUTF16Offset: cursor) else {
+                if completion.isActive { completion.cancel(); hidePanel() }
+                return
+            }
+            if !completion.isActive { cachedCandidates = candidatesProvider() }
+            if completion.isActive {
+                completion.update(query: q, caretRect: .zero, candidates: cachedCandidates)
+            } else {
+                completion.begin(query: q, caretRect: .zero, candidates: cachedCandidates)
+            }
+            if panel == nil { showPanel() }
+            positionPanel()
+        }
+
+        private func commitCompletion() {
+            guard let tv = textView, let ins = completion.commit() else { return }
+            if tv.shouldChangeText(in: ins.range, replacementString: ins.text) {
+                tv.textStorage?.replaceCharacters(in: ins.range, with: ins.text)
+                tv.didChangeText()
+                tv.setSelectedRange(NSRange(location: ins.range.location + (ins.text as NSString).length, length: 0))
+            }
+            editor.edit(tv.string)
+            hidePanel()
+            applyStyling()
+        }
+
+        // MARK: - NSTextViewDelegate
 
         func textDidChange(_ notification: Notification) {
             guard let tv = textView else { return }
             editor.edit(tv.string)
             applyStyling()
+            updateCompletion()
+        }
+
+        func textViewDidChangeSelection(_ notification: Notification) {
+            applyStyling()
+            updateCompletion()
+        }
+
+        func textView(_ textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+            guard completion.isActive else { return false }
+            switch selector {
+            case #selector(NSResponder.moveUp(_:)):
+                completion.moveUp(); return true
+            case #selector(NSResponder.moveDown(_:)):
+                completion.moveDown(); return true
+            case #selector(NSResponder.insertNewline(_:)):
+                commitCompletion(); return true
+            case #selector(NSResponder.cancelOperation(_:)):
+                completion.cancel(); hidePanel(); return true
+            default:
+                return false
+            }
         }
 
         func applyStyling() {
@@ -97,8 +200,6 @@ struct LivePreviewTextView: NSViewRepresentable {
             }
             storage.endEditing()
         }
-
-        func textViewDidChangeSelection(_ notification: Notification) { applyStyling() }
 
         func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
             let raw: String?
