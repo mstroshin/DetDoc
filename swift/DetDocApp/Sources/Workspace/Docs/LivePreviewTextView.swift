@@ -121,7 +121,7 @@ struct LivePreviewTextView: NSViewRepresentable {
                             // Collapsed existing link → replace entire span with a Liquid Glass bubble.
                             let linkText = (raw.string as NSString).substring(with: textRange)
                             let docPath = res.docPath
-                            let bubble = DocLinkBubbleAttachment(title: linkText, docPath: docPath) { [weak self] in
+                            let bubble = DocLinkBubbleAttachment(title: linkText) { [weak self] in
                                 self?.onFollowLink(docPath)
                             }
                             modifications.append((range: span.range, replacement: NSAttributedString(attachment: bubble)))
@@ -223,6 +223,23 @@ struct LivePreviewTextView: NSViewRepresentable {
 
         // MARK: - Refresh helper
 
+        /// Returns the document-absolute NSRange of the link span (if any) that
+        /// contains `caret`, or nil if the caret is not inside a link.
+        private func linkRange(atCaret caret: Int) -> NSRange? {
+            guard let storage = textView?.textStorage, caret >= 0, caret <= storage.length else { return nil }
+            let ns = storage.string as NSString
+            let para = ns.paragraphRange(for: NSRange(location: min(caret, max(0, ns.length - 1)), length: 0))
+            let paraStr = ns.substring(with: para)
+            for span in MarkdownStyleScanner.scan(paraStr) {
+                if case .link = span.kind {
+                    let absStart = para.location + span.range.location
+                    let absEnd = absStart + span.range.length
+                    if caret >= absStart && caret < absEnd { return NSRange(location: absStart, length: absEnd - absStart) }
+                }
+            }
+            return nil
+        }
+
         func refreshCaretParagraphs(old: Int, new: Int) {
             guard let storage = textView?.textStorage else { return }
             let ns = storage.string as NSString
@@ -248,7 +265,11 @@ struct LivePreviewTextView: NSViewRepresentable {
 
         func textViewDidChangeSelection(_ notification: Notification) {
             let new = textView?.selectedRange().location ?? 0
-            refreshCaretParagraphs(old: lastCaret, new: new)
+            let oldLink = linkRange(atCaret: lastCaret)
+            let newLink = linkRange(atCaret: new)
+            if oldLink != newLink {
+                refreshCaretParagraphs(old: lastCaret, new: new)
+            }
             lastCaret = new
             updateCompletion()
         }

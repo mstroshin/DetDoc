@@ -25,18 +25,17 @@ struct DocLinkBubbleView: View {
 
 // DocLinkBubbleAttachment is constructed on the main thread by the @MainActor
 // content-storage delegate, and only ever used on the main thread thereafter.
-// title/docPath are Sendable Strings; onFollow is nonisolated(unsafe) because
-// it's a non-Sendable closure that is exclusively called on the main thread
-// (SwiftUI onTapGesture fires on main).
+// title is a Sendable String; onFollow is nonisolated(unsafe) because it's a
+// non-Sendable closure that is exclusively called on the main thread
+// (SwiftUI onTapGesture fires on main). The target docPath is captured inside
+// the onFollow closure at the call site — no need to store it separately here.
 final class DocLinkBubbleAttachment: NSTextAttachment {
     let title: String
-    let docPath: String
     nonisolated(unsafe) let onFollow: () -> Void
 
     @MainActor
-    init(title: String, docPath: String, onFollow: @escaping @MainActor () -> Void) {
+    init(title: String, onFollow: @escaping @MainActor () -> Void) {
         self.title = title
-        self.docPath = docPath
         self.onFollow = onFollow
         super.init(data: nil, ofType: nil)
     }
@@ -45,7 +44,7 @@ final class DocLinkBubbleAttachment: NSTextAttachment {
 
     // viewProvider is nonisolated in the superclass; the text system always
     // calls it on the main thread. We satisfy Swift 6 by constructing the
-    // provider only with Sendable values (title/docPath) and the
+    // provider only with the Sendable title string and the
     // nonisolated(unsafe) closure — no main-actor-isolated types cross here.
     override func viewProvider(
         for parentView: NSView?,
@@ -74,13 +73,13 @@ final class DocLinkBubbleAttachment: NSTextAttachment {
 // @unchecked Sendable wrapper into MainActor.assumeIsolated so the Swift 6
 // region-isolation checker is satisfied.  The wrapper is only ever created and
 // consumed on the main thread, so the @unchecked annotation is safe.
-private struct Box<T>: @unchecked Sendable { let value: T }
+private struct MainThreadOnly<T>: @unchecked Sendable { let value: T }
 
 final class DocLinkBubbleProvider: NSTextAttachmentViewProvider {
     private let bubbleTitle: String
-    // Closure type is not Sendable; Box<@unchecked Sendable> bridges it safely
+    // Closure type is not Sendable; MainThreadOnly<@unchecked Sendable> bridges it safely
     // because the closure is always created and invoked on the main thread.
-    private let bubbleFollow: Box<() -> Void>
+    private let bubbleFollow: MainThreadOnly<() -> Void>
 
     override init(
         textAttachment: NSTextAttachment,
@@ -90,7 +89,7 @@ final class DocLinkBubbleProvider: NSTextAttachmentViewProvider {
     ) {
         let a = textAttachment as? DocLinkBubbleAttachment
         self.bubbleTitle = a?.title ?? ""
-        self.bubbleFollow = Box(value: a?.onFollow ?? {})
+        self.bubbleFollow = MainThreadOnly(value: a?.onFollow ?? {})
         super.init(textAttachment: textAttachment, parentView: parentView,
                    textLayoutManager: textLayoutManager, location: location)
     }
@@ -100,7 +99,7 @@ final class DocLinkBubbleProvider: NSTextAttachmentViewProvider {
         // so the Swift 6 region checker accepts the assumeIsolated boundary.
         let title = bubbleTitle
         let follow = bubbleFollow
-        let providerBox = Box(value: self)   // wrap non-Sendable provider
+        let providerBox = MainThreadOnly(value: self)   // wrap non-Sendable provider
         MainActor.assumeIsolated {
             providerBox.value.view = NSHostingView(
                 rootView: DocLinkBubbleView(title: title, onFollow: follow.value)
@@ -115,10 +114,10 @@ final class DocLinkBubbleProvider: NSTextAttachmentViewProvider {
         proposedLineFragment: CGRect,
         position: CGPoint
     ) -> CGRect {
-        let providerBox = Box(value: self)
+        let providerBox = MainThreadOnly(value: self)
         let size: CGSize = MainActor.assumeIsolated {
             providerBox.value.view?.fittingSize ?? CGSize(width: 60, height: 18)
         }
-        return CGRect(x: 0, y: -4, width: size.width, height: size.height)
+        return CGRect(x: 0, y: -4, width: size.width, height: size.height) // nudge the capsule down so it sits on the text baseline
     }
 }
