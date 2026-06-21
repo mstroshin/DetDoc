@@ -4,8 +4,10 @@ import DetDocCore
 
 struct LivePreviewTextView: NSViewRepresentable {
     @Bindable var editor: DocEditorViewModel
+    var resolver: DocLinkResolver
+    var onFollowLink: (String) -> Void
 
-    func makeCoordinator() -> Coordinator { Coordinator(editor: editor) }
+    func makeCoordinator() -> Coordinator { Coordinator(editor: editor, resolver: resolver, onFollowLink: onFollowLink) }
 
     func makeNSView(context: Context) -> NSScrollView {
         let scroll = NSTextView.scrollableTextView()
@@ -19,6 +21,7 @@ struct LivePreviewTextView: NSViewRepresentable {
         tv.string = editor.source
         tv.isAutomaticQuoteSubstitutionEnabled = false
         tv.isAutomaticDashSubstitutionEnabled = false
+        tv.isAutomaticLinkDetectionEnabled = false
         context.coordinator.textView = tv
         context.coordinator.applyStyling()
         return scroll
@@ -26,6 +29,7 @@ struct LivePreviewTextView: NSViewRepresentable {
 
     func updateNSView(_ nsView: NSScrollView, context: Context) {
         context.coordinator.editor = editor
+        context.coordinator.resolver = resolver
         guard let tv = nsView.documentView as? NSTextView else { return }
         if tv.string != editor.source {           // external change (open/clear)
             tv.string = editor.source
@@ -36,8 +40,14 @@ struct LivePreviewTextView: NSViewRepresentable {
     @MainActor
     final class Coordinator: NSObject, NSTextViewDelegate {
         var editor: DocEditorViewModel
+        var resolver: DocLinkResolver
+        let onFollowLink: (String) -> Void
         weak var textView: NSTextView?
-        init(editor: DocEditorViewModel) { self.editor = editor }
+        init(editor: DocEditorViewModel, resolver: DocLinkResolver, onFollowLink: @escaping (String) -> Void) {
+            self.editor = editor
+            self.resolver = resolver
+            self.onFollowLink = onFollowLink
+        }
 
         func textDidChange(_ notification: Notification) {
             guard let tv = textView else { return }
@@ -68,14 +78,33 @@ struct LivePreviewTextView: NSViewRepresentable {
                     if let italic = NSFontManager.shared.convert(.monospacedSystemFont(ofSize: 13, weight: .regular), toHaveTrait: .italicFontMask) as NSFont? {
                         storage.addAttribute(.font, value: italic, range: span.range)
                     }
-                case .link:
-                    break   // links styled in Task 7 (needs the resolver)
+                case let .link(destination, _):
+                    let styledLinks = MarkdownStyleApplier.styledLinkRanges(spans: spans, caret: caret)
+                    let isStyled = styledLinks.contains(span)
+                    if let res = resolver.resolve(destination) {
+                        let color: NSColor = res.exists ? .linkColor : .systemRed
+                        storage.addAttribute(.foregroundColor, value: color, range: span.range)
+                        if !res.exists {
+                            storage.addAttribute(.underlineStyle, value: NSUnderlineStyle.patternDot.rawValue | NSUnderlineStyle.single.rawValue, range: span.range)
+                            storage.addAttribute(.toolTip, value: "Missing: \(res.docsRelativePath)", range: span.range)
+                        }
+                        if isStyled, res.exists {
+                            storage.addAttribute(.link, value: "detdoc://\(res.docPath)", range: span.range)
+                        }
+                    }
                 }
             }
-            _ = MarkdownStyleApplier.styledLinkRanges(spans: spans, caret: caret)  // wired in Task 7
             storage.endEditing()
         }
 
         func textViewDidChangeSelection(_ notification: Notification) { applyStyling() }
+
+        func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
+            guard let url = (link as? URL) ?? (link as? String).flatMap(URL.init(string:)),
+                  url.scheme == "detdoc" else { return false }
+            let docPath = String(url.absoluteString.dropFirst("detdoc://".count))
+            onFollowLink(docPath)
+            return true
+        }
     }
 }

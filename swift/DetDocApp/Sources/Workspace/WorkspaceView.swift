@@ -29,6 +29,11 @@ struct WorkspaceView: View {
         _tree = State(initialValue: DocsTreeViewModel(root: root, config: config))
     }
 
+    private var linkResolver: DocLinkResolver {
+        let svc = DocsService(root: root, config: (try? ConfigStore().load(root: root)) ?? .default)
+        return DocLinkResolver(candidates: Set(svc.candidates().map(\.docsRelativePath)))
+    }
+
     var body: some View {
         NavigationSplitView {
             DocsExplorerView(tree: tree, selection: $selectedDoc,
@@ -36,7 +41,9 @@ struct WorkspaceView: View {
                 .navigationSplitViewColumnWidth(min: 220, ideal: 280, max: 360)
                 .navigationTitle("Docs")
         } detail: {
-            DocEditorScreen(editor: editor)
+            DocEditorScreen(editor: editor, resolver: linkResolver) { docPath in
+                if !tree.isDirectory(docPath) { selectedDoc = docPath }
+            }
         }
         .inspector(isPresented: $showInspector) {
             RunInspectorView(panel: panel)
