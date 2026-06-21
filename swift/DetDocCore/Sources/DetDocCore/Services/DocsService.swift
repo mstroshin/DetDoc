@@ -95,6 +95,26 @@ public struct DocsService: Sendable {
         }
     }
 
+    public func candidates() -> [DocCandidate] {
+        list().map { file in
+            let rel = file.path.hasPrefix("docs/") ? String(file.path.dropFirst("docs/".count)) : file.path
+            return DocCandidate(name: file.title, docsRelativePath: rel, title: firstHeading(file.path))
+        }
+    }
+
+    private func firstHeading(_ path: String) -> String? {
+        guard let text = try? read(path) else { return nil }
+        for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
+            let t = line.trimmingCharacters(in: .whitespaces)
+            let hashes = t.prefix(while: { $0 == "#" }).count
+            if hashes >= 1, hashes <= 6, t.dropFirst(hashes).first == " " {
+                return String(t.dropFirst(hashes)).trimmingCharacters(in: .whitespaces)
+            }
+            if !t.isEmpty { return nil }   // first non-blank line isn't a heading
+        }
+        return nil
+    }
+
     private func relativePath(_ url: URL) -> String {
         let rootComponents = root.standardizedFileURL.pathComponents
         let urlComponents = url.standardizedFileURL.pathComponents
