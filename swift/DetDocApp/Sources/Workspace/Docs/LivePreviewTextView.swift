@@ -44,6 +44,37 @@ struct LivePreviewTextView: NSViewRepresentable {
             applyStyling()
         }
 
-        func applyStyling() { /* filled in Task 6 */ }
+        func applyStyling() {
+            guard let tv = textView, let storage = tv.textStorage else { return }
+            let full = NSRange(location: 0, length: (tv.string as NSString).length)
+            let caret = tv.selectedRange()
+            let spans = MarkdownStyleScanner.scan(tv.string)
+
+            storage.beginEditing()
+            storage.setAttributes([
+                .font: NSFont.monospacedSystemFont(ofSize: 13, weight: .regular),
+                .foregroundColor: NSColor.textColor,
+            ], range: full)
+
+            for span in spans {
+                switch span.kind {
+                case let .heading(level):
+                    let size: CGFloat = [1: 22, 2: 19, 3: 16].first { $0.key == level }?.value ?? 14
+                    storage.addAttribute(.font, value: NSFont.monospacedSystemFont(ofSize: size, weight: .bold), range: span.range)
+                case .bold:
+                    storage.addAttribute(.font, value: NSFont.monospacedSystemFont(ofSize: 13, weight: .bold), range: span.range)
+                case .italic:
+                    if let italic = NSFontManager.shared.convert(.monospacedSystemFont(ofSize: 13, weight: .regular), toHaveTrait: .italicFontMask) as NSFont? {
+                        storage.addAttribute(.font, value: italic, range: span.range)
+                    }
+                case .link:
+                    break   // links styled in Task 7 (needs the resolver)
+                }
+            }
+            _ = MarkdownStyleApplier.styledLinkRanges(spans: spans, caret: caret)  // wired in Task 7
+            storage.endEditing()
+        }
+
+        func textViewDidChangeSelection(_ notification: Notification) { applyStyling() }
     }
 }
