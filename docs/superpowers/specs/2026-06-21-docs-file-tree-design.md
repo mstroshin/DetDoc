@@ -78,7 +78,9 @@ empty folders are persistent and do not disappear.
 - `nodes: [DocTreeNode]` — the current tree.
 - `error: DetDocError?` — last operation error, surfaced as an alert.
 - `refresh()` — calls `DocsService.list()` + `listDirectories()`, feeds
-  `DocTreeBuilder.build` and assigns `nodes`.
+  `DocTreeBuilder.build`, and assigns `nodes`. It unwraps the single `docs`
+  root node so the top level shows the contents of `docs/` directly (ids remain
+  full relative paths).
 - `newFile(name:in:)`, `newFolder(name:in:)`, `rename(_:to:)`, `delete(_:)` —
   wrap the matching `DocsService` methods, map thrown `DetDocError` into `error`,
   and `refresh()` on success. New/rename/delete return the affected new path so
@@ -93,11 +95,8 @@ otherwise the `docs/` root.
 `DocsExplorerView` is rewritten to a hierarchy:
 
 ```swift
-List(selection: $selection) {
-    OutlineGroup(tree.nodes, children: \.children) { node in
-        Label(node.name, systemImage: node.isDirectory ? "folder" : "doc.text")
-            .tag(node.id)
-    }
+List(tree.nodes, children: \.children, selection: $selection) { node in
+    Label(node.name, systemImage: node.isDirectory ? "folder" : "doc.text")
 }
 ```
 
@@ -112,7 +111,9 @@ List(selection: $selection) {
 - A small "unsaved changes" dot is shown on the file currently being edited
   (`editor.isDirty` for the selected path). Git modified/dirty badges are out of
   scope (possible future enhancement).
-- Folders default to expanded; expansion state is not persisted (future enhancement).
+- Folders use the native `List(_:children:selection:)` disclosure and start
+  collapsed (standard for file trees); expansion state is not persisted. The
+  single `docs` root is unwrapped so docs/ contents appear at the top level.
 - The empty-state `ContentUnavailableView` ("No documents") is preserved when the
   tree is empty.
 
@@ -156,5 +157,6 @@ selection sync handles stale paths by clearing or remapping.
 
 - Whole-repository file browser (docs-only by decision).
 - Git dirty/modified badges in the tree.
-- Persisted folder expansion state.
+- Persisted folder expansion state, and default-expanded / expand-all folders
+  (native collapsed disclosure is used).
 - Drag-and-drop move/reordering.
