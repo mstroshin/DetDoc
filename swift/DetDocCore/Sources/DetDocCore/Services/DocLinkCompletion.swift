@@ -41,18 +41,18 @@ extension DocLinkCompletion {
     public static func suggestions(query: String, candidates: [DocCandidate]) -> [DocCandidate] {
         let q = query.lowercased()
         guard !q.isEmpty else { return candidates }
-        let ranked: [(DocCandidate, Int, Int)] = candidates.enumerated().compactMap { idx, c in
+        let ranked: [(DocCandidate, Int)] = candidates.compactMap { c in
             let path = c.docsRelativePath.lowercased()
             if let r = path.range(of: q) {
                 let isPrefix = path.hasPrefix(q) || c.name.lowercased().hasPrefix(q)
                 let offset = path.distance(from: path.startIndex, to: r.lowerBound)
-                return (c, isPrefix ? 0 : 1 + offset, idx)
+                return (c, isPrefix ? 0 : 1 + offset)
             }
-            if (c.title ?? "").lowercased().contains(q) { return (c, 1000, idx) }
+            if (c.title ?? "").lowercased().contains(q) { return (c, 1000) }
             return nil
         }
         return ranked.sorted {
-            $0.1 != $1.1 ? $0.1 < $1.1 : $0.2 < $1.2
+            $0.1 != $1.1 ? $0.1 < $1.1 : $0.0.docsRelativePath < $1.0.docsRelativePath
         }.map(\.0)
     }
 }

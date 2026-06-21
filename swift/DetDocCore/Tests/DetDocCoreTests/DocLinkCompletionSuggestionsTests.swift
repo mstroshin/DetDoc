@@ -13,8 +13,7 @@ private let cands = [
 
 @Test func suggestionsPrefixRanksFirst() {
     let r = DocLinkCompletion.suggestions(query: "gu", candidates: cands)
-    #expect(r.first?.docsRelativePath == "guides/glossary.md" || r.first?.docsRelativePath == "guides/setup.md")
-    #expect(r.allSatisfy { $0.docsRelativePath.lowercased().contains("gu") || ($0.title ?? "").lowercased().contains("gu") })
+    #expect(r.map(\.docsRelativePath) == ["guides/glossary.md", "guides/setup.md", "arch.md"])
 }
 
 @Test func suggestionsTitleOnlyMatchIncluded() {
