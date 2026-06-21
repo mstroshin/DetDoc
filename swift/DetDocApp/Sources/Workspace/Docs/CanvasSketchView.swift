@@ -7,7 +7,7 @@ struct CanvasSketchView: View {
     var onInsert: (Data) -> Void
     var onCancel: () -> Void
 
-    @State private var strokes: [CanvasStroke] = []
+    @State private var strokes: [CanvasStroke]
     @State private var current: CanvasStroke?
     @State private var color: CanvasColor = .white
     @State private var tool: Tool = .pen
@@ -15,6 +15,15 @@ struct CanvasSketchView: View {
     @State private var boardSize: CGSize = .zero
 
     private let widths: [CGFloat] = [2, 4, 8]
+
+    /// `initialStrokes` seeds the board — used by previews to show a drawn state.
+    init(onInsert: @escaping (Data) -> Void,
+         onCancel: @escaping () -> Void,
+         initialStrokes: [CanvasStroke] = []) {
+        self.onInsert = onInsert
+        self.onCancel = onCancel
+        _strokes = State(initialValue: initialStrokes)
+    }
 
     private enum Tool { case pen, eraser }
 
@@ -47,6 +56,7 @@ struct CanvasSketchView: View {
             }
             .background(Color.black)
             .contentShape(Rectangle())
+            .accessibilityIdentifier("canvas.board")
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in
@@ -87,8 +97,8 @@ struct CanvasSketchView: View {
     private var toolbar: some View {
         HStack(spacing: 14) {
             HStack(spacing: 10) {
-                ForEach(Array(CanvasColor.palette.enumerated()), id: \.offset) { _, c in
-                    colorSwatch(c)
+                ForEach(Array(CanvasColor.palette.enumerated()), id: \.offset) { item in
+                    colorSwatch(item.element, index: item.offset)
                 }
                 eraserSwatch
             }
@@ -102,7 +112,7 @@ struct CanvasSketchView: View {
         .padding(.vertical, 10)
     }
 
-    private func colorSwatch(_ c: CanvasColor) -> some View {
+    private func colorSwatch(_ c: CanvasColor, index: Int) -> some View {
         Button { tool = .pen; color = c } label: {
             Circle()
                 .fill(c.swiftUIColor)
@@ -113,6 +123,7 @@ struct CanvasSketchView: View {
         }
         .buttonStyle(.plain)
         .help("Цвет пера")
+        .accessibilityIdentifier("canvas.color.\(index)")
     }
 
     private var eraserSwatch: some View {
@@ -128,6 +139,7 @@ struct CanvasSketchView: View {
         }
         .buttonStyle(.plain)
         .help("Ластик")
+        .accessibilityIdentifier("canvas.tool.eraser")
     }
 
     private func widthSwatch(_ w: CGFloat) -> some View {
@@ -142,6 +154,7 @@ struct CanvasSketchView: View {
         }
         .buttonStyle(.plain)
         .help("Толщина пера")
+        .accessibilityIdentifier("canvas.width.\(Int(w))")
     }
 
     // MARK: - Bottom toolbar (undo / clear / cancel / insert)
@@ -153,20 +166,24 @@ struct CanvasSketchView: View {
             }
             .keyboardShortcut("z", modifiers: .command)
             .disabled(strokes.isEmpty)
+            .accessibilityIdentifier("canvas.undo")
 
             Button(role: .destructive) { strokes.removeAll(); current = nil } label: {
                 Label("Очистить", systemImage: "trash")
             }
             .disabled(strokes.isEmpty)
+            .accessibilityIdentifier("canvas.clear")
 
             Spacer()
 
             Button("Отмена") { onCancel() }
                 .keyboardShortcut(.cancelAction)
+                .accessibilityIdentifier("canvas.cancel")
             Button("Вставить") { insert() }
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
                 .disabled(strokes.isEmpty)
+                .accessibilityIdentifier("canvas.insert")
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -177,4 +194,21 @@ struct CanvasSketchView: View {
         guard let data = CanvasImageRenderer.png(strokes: strokes, size: size, scale: 2) else { return }
         onInsert(data)
     }
+}
+
+#Preview("Empty") {
+    CanvasSketchView(onInsert: { _ in }, onCancel: {})
+        .frame(width: 640, height: 520)
+}
+
+#Preview("With sketch") {
+    CanvasSketchView(onInsert: { _ in }, onCancel: {}, initialStrokes: [
+        CanvasStroke(points: [CGPoint(x: 120, y: 150), CGPoint(x: 300, y: 210), CGPoint(x: 200, y: 320)],
+                     color: .white, width: 4),
+        CanvasStroke(points: [CGPoint(x: 340, y: 130), CGPoint(x: 470, y: 250)],
+                     color: .red, width: 8),
+        CanvasStroke(points: [CGPoint(x: 150, y: 360), CGPoint(x: 430, y: 380)],
+                     color: .green, width: 2),
+    ])
+    .frame(width: 640, height: 520)
 }
