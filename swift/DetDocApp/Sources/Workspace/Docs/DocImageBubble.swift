@@ -21,12 +21,13 @@ struct DocImageView: View {
 
 // Same isolation strategy as DocLinkBubbleAttachment: the attachment is built on the
 // main thread by the @MainActor content-storage delegate and only used on main.
-// `url` is Sendable; `onOpen` and `editor` are non-Sendable values marked
-// nonisolated(unsafe) because they are exclusively used on the main thread.
+// `url` and `editor` (a @MainActor-isolated, hence Sendable, type) cross freely;
+// `onOpen` is a non-Sendable closure marked nonisolated(unsafe) because it is
+// exclusively invoked on the main thread.
 final class DocImageAttachment: NSTextAttachment {
     let url: URL
     nonisolated(unsafe) let onOpen: () -> Void
-    nonisolated(unsafe) let editor: DocEditorViewModel
+    let editor: DocEditorViewModel
 
     @MainActor
     init(url: URL, editor: DocEditorViewModel, onOpen: @escaping @MainActor () -> Void) {
