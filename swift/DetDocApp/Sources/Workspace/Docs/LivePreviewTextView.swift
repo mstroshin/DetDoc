@@ -404,6 +404,72 @@ struct LivePreviewTextView: NSViewRepresentable {
             updateCompletion(allowOpen: false)
         }
 
+        // A collapsed token (link bubble or image) is one display glyph standing in for
+        // the whole `@token` backing text, so TextKit's hit-testing maps a click in its
+        // area to an arbitrary boundary of that range — usually the start, which then
+        // reveals the raw text instead of leaving a caret where the user clicked. Snap a
+        // click-caret that lands in a collapsed token to the side actually clicked:
+        // right half -> end (stays collapsed, ready to delete), left half -> start (reveal).
+        func textView(_ textView: NSTextView,
+                      willChangeSelectionFromCharacterRanges oldSelectedCharRanges: [NSValue],
+                      toCharacterRanges newSelectedCharRanges: [NSValue]) -> [NSValue] {
+            guard isMouseClick(NSApp.currentEvent),
+                  newSelectedCharRanges.count == 1,
+                  let proposed = newSelectedCharRanges.first?.rangeValue,
+                  proposed.length == 0,
+                  let token = collapsedTokenRange(containing: proposed.location)
+            else { return newSelectedCharRanges }
+
+            let snapped = clickIsRightOfToken(token) ? token.location + token.length : token.location
+            return [NSValue(range: NSRange(location: snapped, length: 0))]
+        }
+
+        private func isMouseClick(_ e: NSEvent?) -> Bool {
+            switch e?.type {
+            case .leftMouseDown, .leftMouseUp: return true
+            default: return false
+            }
+        }
+
+        /// The backing range of a resolvable (collapsed) doc-link or image token whose
+        /// span contains `p` (inclusive of both ends), or nil. Broken tokens render as
+        /// raw text — not collapsed — so they are deliberately excluded.
+        private func collapsedTokenRange(containing p: Int) -> NSRange? {
+            guard let storage = textView?.textStorage, p >= 0, p <= storage.length else { return nil }
+            let ns = storage.string as NSString
+            guard ns.length > 0 else { return nil }
+            let para = ns.paragraphRange(for: NSRange(location: min(p, ns.length - 1), length: 0))
+            let paraStr = ns.substring(with: para)
+            for ref in DocRefScanner.scan(paraStr) {
+                guard let res = resolver.resolve(ref.path), res.exists else { continue }
+                let absStart = para.location + ref.range.location
+                let absEnd = absStart + ref.range.length
+                if p >= absStart && p <= absEnd { return NSRange(location: absStart, length: ref.range.length) }
+            }
+            for img in ImageRefScanner.scan(paraStr) {
+                guard imageImporter.resolve(img.path) != nil else { continue }
+                let absStart = para.location + img.range.location
+                let absEnd = absStart + img.range.length
+                if p >= absStart && p <= absEnd { return NSRange(location: absStart, length: img.range.length) }
+            }
+            return nil
+        }
+
+        /// True if the current mouse click is at or past the horizontal midpoint of the
+        /// token's rendered rect. Defaults to true (end) when geometry is unavailable —
+        /// the user's primary case is clicking to the right.
+        private func clickIsRightOfToken(_ token: NSRange) -> Bool {
+            guard let tv = textView, let event = NSApp.currentEvent else { return true }
+            let click = tv.convert(event.locationInWindow, from: nil)
+            var rect = tv.firstRect(forCharacterRange: token, actualRange: nil)
+            if rect == .zero { return true }
+            if let win = tv.window {
+                rect = win.convertFromScreen(rect)
+                rect = tv.convert(rect, from: nil)
+            }
+            return click.x >= rect.midX
+        }
+
         // Dismiss the picker when the text view loses focus.
         func textDidEndEditing(_ notification: Notification) {
             if completion.isActive { completion.cancel(); hidePanel() }
