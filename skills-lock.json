@@ -1,6 +1,11 @@
 {
   "version": 1,
   "skills": {
+    "sosumi": {
+      "source": "sosumi.ai",
+      "sourceType": "well-known",
+      "computedHash": "ed80519bc628e98a9b56d897ed27a205e3511981ffbdfc7d0fefd472aba8e224"
+    },
     "swift-concurrency": {
       "source": "avdlee/swift-concurrency-agent-skill",
       "sourceType": "github",
