@@ -79,7 +79,7 @@ struct LivePreviewTextView: NSViewRepresentable {
 
         let completion = DocLinkCompletionModel()
         private var panel: NSPanel?
-        private let quickLook = ImageQuickLookSource()
+        let quickLook = ImageQuickLookSource()
         private var cachedCandidates: [DocCandidate] = []
         private var lastCaret = 0
 
@@ -232,10 +232,16 @@ struct LivePreviewTextView: NSViewRepresentable {
 
         func openQuickLook(_ url: URL) {
             quickLook.url = url
+            // QLPreviewPanel follows the responder chain — ensure the text view
+            // (which implements QLPreviewPanelController) is first responder so the
+            // panel adopts our data source, then present or refresh it.
+            if let tv = textView { tv.window?.makeFirstResponder(tv) }
             guard let panel = QLPreviewPanel.shared() else { return }
-            panel.dataSource = quickLook
-            panel.makeKeyAndOrderFront(nil)
-            panel.reloadData()
+            if panel.isVisible {
+                panel.reloadData()
+            } else {
+                panel.makeKeyAndOrderFront(nil)
+            }
         }
 
         // MARK: - Image drop / paste
@@ -259,6 +265,8 @@ struct LivePreviewTextView: NSViewRepresentable {
                let token = try? imageImporter.importData(data, basename: Self.generatedBasename(), forDoc: docPath) {
                 tokens.append(token)
             }
+            // Imported files already live in assets/; if nothing is inserted they are
+            // left as harmless orphans (no cleanup — acceptable per the spec edge-cases).
             guard !tokens.isEmpty else { return false }
             insertImageTokens(tokens, at: charIndex, in: tv)
             return true
@@ -299,6 +307,7 @@ struct LivePreviewTextView: NSViewRepresentable {
                 tv.didChangeText()
                 tv.setSelectedRange(NSRange(location: loc + (text as NSString).length, length: 0))
             }
+            // Routed outside the shouldChangeText guard on purpose — mirrors commitCompletion().
             editor.edit(tv.string)
         }
 
