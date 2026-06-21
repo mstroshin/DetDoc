@@ -26,6 +26,7 @@ public final class DocsTreeViewModel {
 
     @discardableResult
     public func newFile(name: String, in directory: String) -> String? {
+        guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         let leaf = name.hasSuffix(".md") ? name : name + ".md"
         let path = directory.isEmpty ? leaf : "\(directory)/\(leaf)"
         let title = String(leaf.dropLast(3))   // leaf always ends in ".md" (normalized above)
@@ -34,12 +35,14 @@ public final class DocsTreeViewModel {
 
     @discardableResult
     public func newFolder(name: String, in directory: String) -> String? {
+        guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         let path = directory.isEmpty ? name : "\(directory)/\(name)"
         return run { try docs.createDirectory(path); return path }
     }
 
     @discardableResult
     public func rename(_ path: String, to newName: String) -> String? {
+        guard !newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         let parent = Self.parentDirectory(of: path)
         let leaf = (!isDirectory(path) && !newName.hasSuffix(".md")) ? newName + ".md" : newName
         let newPath = parent.isEmpty ? leaf : "\(parent)/\(leaf)"

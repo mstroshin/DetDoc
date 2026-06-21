@@ -111,6 +111,18 @@ private func makeVM() async throws -> (VMGitFixture, DocsTreeViewModel) {
     #expect(DocsTreeViewModel.remapAfterRename(selection: nil, from: "a", to: "b") == nil)
 }
 
+@MainActor
+@Test func blankNamesAreRejected() async throws {
+    let (fx, vm) = try await makeVM()
+    #expect(vm.newFile(name: "   ", in: "docs") == nil)
+    #expect(vm.newFolder(name: "", in: "docs") == nil)
+    #expect(vm.rename("docs/idea.md", to: "  ") == nil)
+    // No ghost ".md" file was created, and the original doc is untouched.
+    #expect(vm.nodes.contains { $0.name == ".md" } == false)
+    #expect(vm.nodes.contains { $0.name == "idea.md" })
+    withExtendedLifetime(fx) {}
+}
+
 @Test func remapAfterDeleteClearsSelfAndDescendants() {
     #expect(DocsTreeViewModel.remapAfterDelete(selection: "docs/idea.md", deleted: "docs/idea.md") == nil)
     #expect(DocsTreeViewModel.remapAfterDelete(selection: "docs/features/brief.md", deleted: "docs/features") == nil)
