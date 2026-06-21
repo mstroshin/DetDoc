@@ -29,7 +29,8 @@ private func makeVM() async throws -> (VMGitFixture, DocsTreeViewModel) {
     let (fx, vm) = try await makeVM()
     let path = vm.newFile(name: "notes", in: "docs")
     #expect(path == "docs/notes.md")
-    #expect(try String(contentsOf: fx.root.appendingPathComponent("docs/notes.md"), encoding: .utf8).contains("notes"))
+    let content = try String(contentsOf: fx.root.appendingPathComponent("docs/notes.md"), encoding: .utf8)
+    #expect(content == "# notes\n")
     #expect(vm.nodes.contains { $0.name == "notes.md" })
     #expect(vm.error == nil)
     withExtendedLifetime(fx) {}
@@ -99,6 +100,7 @@ private func makeVM() async throws -> (VMGitFixture, DocsTreeViewModel) {
     #expect(vm.directoryForNewEntry(selection: nil) == "docs")
     #expect(vm.directoryForNewEntry(selection: "docs/features") == "docs/features")     // directory selected
     #expect(vm.directoryForNewEntry(selection: "docs/idea.md") == "docs")               // file -> its parent
+    #expect(vm.directoryForNewEntry(selection: "docs/does-not-exist.md") == "docs")
     withExtendedLifetime(fx) {}
 }
 

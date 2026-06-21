@@ -28,7 +28,7 @@ public final class DocsTreeViewModel {
     public func newFile(name: String, in directory: String) -> String? {
         let leaf = name.hasSuffix(".md") ? name : name + ".md"
         let path = directory.isEmpty ? leaf : "\(directory)/\(leaf)"
-        let title = leaf.hasSuffix(".md") ? String(leaf.dropLast(3)) : leaf
+        let title = String(leaf.dropLast(3))   // leaf always ends in ".md" (normalized above)
         return run { try docs.create(path, "# \(title)\n"); return path }
     }
 
