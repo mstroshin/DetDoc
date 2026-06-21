@@ -41,6 +41,9 @@ final class DocImageDragController: NSObject {
         switch g.state {
         case .began:
             hostingView?.alphaValue = 0.4
+            if let target = targetBoundary(in: tv, at: g.location(in: tv)) {
+                positionIndicator(in: tv, atBoundary: target)
+            }
         case .changed:
             if let target = targetBoundary(in: tv, at: g.location(in: tv)) {
                 positionIndicator(in: tv, atBoundary: target)
@@ -88,12 +91,11 @@ final class DocImageDragController: NSObject {
               let move = ParagraphMover.move(in: tv.string, lineContaining: sourceIndex, toBoundary: target)
         else { return }
         let full = NSRange(location: 0, length: (tv.string as NSString).length)
-        if tv.shouldChangeText(in: full, replacementString: move.text) {
-            tv.textStorage?.replaceCharacters(in: full, with: move.text)
-            tv.didChangeText()
-            let caret = max(0, min(move.caret, (move.text as NSString).length))
-            tv.setSelectedRange(NSRange(location: caret, length: 0))
-        }
+        guard tv.shouldChangeText(in: full, replacementString: move.text) else { return }
+        tv.textStorage?.replaceCharacters(in: full, with: move.text)
+        tv.didChangeText()
+        let caret = max(0, min(move.caret, (move.text as NSString).length))
+        tv.setSelectedRange(NSRange(location: caret, length: 0))
         editor.edit(tv.string)
     }
 
