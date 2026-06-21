@@ -33,6 +33,7 @@ struct LivePreviewTextView: NSViewRepresentable {
         }
     }
 
+    @MainActor
     final class Coordinator: NSObject, NSTextViewDelegate {
         var editor: DocEditorViewModel
         weak var textView: NSTextView?
