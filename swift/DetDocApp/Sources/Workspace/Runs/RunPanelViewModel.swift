@@ -11,8 +11,7 @@ public final class RunPanelViewModel {
 
     public private(set) var stage: Stage = .idle
     public private(set) var currentPhase: RunPhase?
-    public private(set) var logLines: [String] = []
-    public private(set) var planReview: PlanReviewViewModel?
+    public private(set) var planReview: ProposedPlan?
     public private(set) var patchReview: PatchReviewViewModel?
     public private(set) var result: RunFlowResult?
     public private(set) var error: DetDocError?
@@ -90,10 +89,8 @@ public final class RunPanelViewModel {
         switch event {
         case .progress(let phase, _):
             currentPhase = phase
-        case .log(let line):
-            logLines.append(line)
         case .planReady(let plan):
-            planReview = PlanReviewViewModel(plan: plan)
+            planReview = plan
             stage = .planPending
         case .patchReady(let review):
             patchReview = PatchReviewViewModel(review: review)
@@ -113,7 +110,6 @@ public final class RunPanelViewModel {
 
     private func reset() {
         currentPhase = nil
-        logLines = []
         planReview = nil
         patchReview = nil
         result = nil

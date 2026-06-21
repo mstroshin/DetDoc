@@ -2,7 +2,7 @@ import SwiftUI
 import DetDocCore
 
 struct PlanReviewView: View {
-    let plan: PlanReviewViewModel
+    let plan: ProposedPlan
     let onApprove: () -> Void
     let onReject: () -> Void
 

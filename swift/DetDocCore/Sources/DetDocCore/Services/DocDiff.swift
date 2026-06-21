@@ -1,7 +1,7 @@
 public enum DocDiff {
     public static func normalized(_ repo: GitRepository, config: DetDocConfig) async throws -> String {
         let entries = try await repo.statusPorcelain()
-        try DirtyPolicy.assertClean(entries, config: config, mode: .run)
+        try DirtyPolicy.assertClean(entries, config: config)
         let policy = PathPolicy(config: config)
         let docPaths = entries.filter { policy.isDoc($0.path) }.map(\.path)
         if docPaths.isEmpty {

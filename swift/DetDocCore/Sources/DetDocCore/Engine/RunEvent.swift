@@ -31,7 +31,6 @@ public struct PatchReview: Sendable {
 
 public enum RunEvent: Sendable {
     case progress(phase: RunPhase, message: String)
-    case log(String)
     case planReady(ProposedPlan)
     case patchReady(PatchReview)
     case error(DetDocError)

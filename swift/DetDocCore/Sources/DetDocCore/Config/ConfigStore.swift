@@ -47,17 +47,13 @@ public struct ConfigStore: Sendable {
         }
     }
 
-    public func writeDefault(root: URL) throws {
-        try writeIfMissing(configPath(root: root), try defaultConfigYAML())
-    }
-
     public func initFiles(root: URL) throws {
         try writeIfMissing(configPath(root: root), try defaultConfigYAML())
         try writeIfMissing(root.appendingPathComponent(".detdoc/runs/.gitkeep"), "")
         for (relativePath, content) in Self.starterDocs {
             try writeIfMissing(root.appendingPathComponent(relativePath), content)
         }
-        try ensureGitignoreEntries(root: root)
+        try GitignoreManager.ensureManagedEntries(root: root)
     }
 
     static let starterDocs: [(String, String)] = [
@@ -85,19 +81,4 @@ public struct ConfigStore: Sendable {
         }
     }
 
-    private func ensureGitignoreEntries(root: URL) throws {
-        let url = root.appendingPathComponent(".gitignore")
-        var content = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
-        let entries = [".DS_Store", ".detdoc/runs/*", "!.detdoc/runs/.gitkeep", ".worktrees/"]
-        for entry in entries where !content.split(separator: "\n", omittingEmptySubsequences: false)
-            .contains(where: { $0.trimmingCharacters(in: .whitespaces) == entry }) {
-            if !content.isEmpty && !content.hasSuffix("\n") { content += "\n" }
-            content += entry + "\n"
-        }
-        do {
-            try content.write(to: url, atomically: true, encoding: .utf8)
-        } catch {
-            throw DetDocError("GITIGNORE_WRITE_FAILED", "\(error)")
-        }
-    }
 }

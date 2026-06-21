@@ -35,7 +35,6 @@ struct RunInspectorView: View {
             ContentUnavailableView("Ready", systemImage: "play.circle", description: Text("Run docs or start a fix to begin."))
         case .running:
             ProgressView().controlSize(.small)
-            logView
         case .planPending:
             if let plan = panel.planReview {
                 PlanReviewView(plan: plan, onApprove: { panel.approvePlan() }, onReject: { panel.rejectPlan() })
@@ -47,23 +46,10 @@ struct RunInspectorView: View {
         case .completed:
             Label(panel.result?.applied == true ? "Applied" : "Saved (not applied)",
                   systemImage: "checkmark.circle.fill").foregroundStyle(.green)
-            logView
         case .failed:
             if let error = panel.error {
                 Label(error.code, systemImage: "xmark.octagon.fill").foregroundStyle(.red)
                 Text(error.message).font(.callout).textSelection(.enabled)
-            }
-        }
-    }
-
-    @ViewBuilder private var logView: some View {
-        if !panel.logLines.isEmpty {
-            DisclosureGroup("Logs") {
-                ScrollView {
-                    Text(panel.logLines.joined(separator: "\n"))
-                        .font(.system(.caption, design: .monospaced))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }.frame(maxHeight: 180)
             }
         }
     }

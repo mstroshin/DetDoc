@@ -14,6 +14,6 @@ import Testing
 
 @Test func assertCleanThrowsOnNonDocChanges() {
     let entries = [GitStatusEntry(status: " M", path: "src/app.swift")]
-    #expect { try DirtyPolicy.assertClean(entries, config: .default, mode: .fix) }
+    #expect { try DirtyPolicy.assertClean(entries, config: .default) }
         throws: { ($0 as? DetDocError)?.code == "DIRTY_NON_DOC_CHANGES" }
 }

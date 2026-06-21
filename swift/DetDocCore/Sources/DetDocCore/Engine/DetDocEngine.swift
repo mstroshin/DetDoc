@@ -99,7 +99,7 @@ public actor DetDocEngine {
         if mode == .run {
             taskInput = try await DocDiff.normalized(mainRepo, config: config)
         } else {
-            try DirtyPolicy.assertClean(try await mainRepo.statusPorcelain(), config: config, mode: .fix)
+            try DirtyPolicy.assertClean(try await mainRepo.statusPorcelain(), config: config)
             let msg = message ?? ""
             if msg.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 throw DetDocError("EMPTY_FIX_MESSAGE", "detdoc fix requires a non-empty message.")

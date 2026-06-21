@@ -6,7 +6,7 @@ public enum DirtyPolicy {
         }
     }
 
-    public static func assertClean(_ entries: [GitStatusEntry], config: DetDocConfig, mode: RunMode) throws {
+    public static func assertClean(_ entries: [GitStatusEntry], config: DetDocConfig) throws {
         let offenders = nonDocOffenders(entries, config: config)
         if !offenders.isEmpty {
             throw DetDocError("DIRTY_NON_DOC_CHANGES", offenders.map(\.path).joined(separator: ", "))

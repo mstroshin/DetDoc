@@ -32,10 +32,6 @@ public final class WorkspaceViewModel {
             return
         }
         docs = DocsService(root: root, config: config).list()
-        runs = loadRuns()
-    }
-
-    private func loadRuns() -> [RunSummary] {
-        ArtifactStore(projectRoot: root).listRuns()
+        runs = ArtifactStore(projectRoot: root).listRuns()
     }
 }
