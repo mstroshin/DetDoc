@@ -56,3 +56,10 @@ import Testing
     // range covers "@guides/setup" (13 chars) starting at offset 4, NOT the trailing dot
     #expect(refs[0].range == NSRange(location: 4, length: 13))
 }
+
+@Test func scanExcludesImageExtensionTokens() {
+    // A token with an image extension is NOT a doc ref (it belongs to ImageRefScanner).
+    let refs = DocRefScanner.scan("@guides/assets/window.png and @guides/setup")
+    #expect(refs.count == 1)
+    #expect(refs[0].path == "guides/setup")
+}

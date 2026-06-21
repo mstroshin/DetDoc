@@ -7,19 +7,12 @@ public struct DocRef: Equatable, Sendable {
 }
 
 public enum DocRefScanner {
-    /// Finds `@<path>` tokens where `@` is at a word boundary (start of text or
-    /// preceded by whitespace) and is followed by >=1 path char
-    /// (letters, digits, and / - _ .). The path excludes the leading `@`.
+    /// Finds `@<path>` doc-link tokens. Tokens whose path ends in a recognized image
+    /// extension are owned by `ImageRefScanner` and excluded here.
     public static func scan(_ text: String) -> [DocRef] {
-        let ns = text as NSString
-        let re = try! NSRegularExpression(pattern: #"(?<![^\s])@([\p{L}\p{N}/_.\-]+)"#)
-        return re.matches(in: text, range: NSRange(location: 0, length: ns.length)).compactMap { m in
-            let full = m.range
-            var path = ns.substring(with: m.range(at: 1))
-            var len = full.length
-            while let last = path.last, "./-_".contains(last) { path.removeLast(); len -= 1 }
-            guard !path.isEmpty else { return nil }
-            return DocRef(range: NSRange(location: full.location, length: len), path: path)
+        AtTokenScanner.scan(text).compactMap { tok in
+            guard !ImageRefScanner.isImagePath(tok.path) else { return nil }
+            return DocRef(range: tok.range, path: tok.path)
         }
     }
 }
