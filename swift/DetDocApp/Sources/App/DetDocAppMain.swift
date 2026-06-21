@@ -1,5 +1,4 @@
 import SwiftUI
-import DetDocViewModels
 
 @main
 struct DetDocAppMain: App {

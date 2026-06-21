@@ -1,5 +1,4 @@
 import SwiftUI
-import DetDocViewModels
 
 struct DocEditorScreen: View {
     @Bindable var editor: DocEditorViewModel

@@ -20,17 +20,17 @@ The core flow is:
 The product is a SwiftUI macOS application backed by a UI-agnostic Swift core. Everything
 lives under `swift/`:
 
-- **`swift/DetDocCore`** — pure-Swift SwiftPM package with two products:
-  - `DetDocCore` — domain models, config (Yams), path policy + glob matcher, plan/patch
-    validators, git/worktree/docs services, doc-diff + dirty policy, artifact store, run-id,
-    the `DetDocEngine` orchestrator, and the agent layer (`AgentRunner`, `FakeAgentRunner`,
-    and `PiAgentRunner` driving `pi --mode rpc` over strict LF-delimited JSONL).
-  - `DetDocViewModels` — `@MainActor @Observable` MVVM+C layer (coordinator/routing,
-    per-screen view models, diff model), tested headless.
-- **`swift/DetDocApp`** — the macOS SwiftUI shell (XcodeGen project, `@main` App,
-  `NSOpenPanel` folder picker, workspace with `NavigationSplitView` + inspector, docs
-  explorer, source/preview editor, run/fix panel with plan & patch approval gates, runs,
-  settings, onboarding). Views are thin; all logic lives in the tested view models.
+- **`swift/DetDocCore`** — pure-Swift SwiftPM package exposing the `DetDocCore` product:
+  domain models, config (Yams), path policy + glob matcher, plan/patch validators,
+  git/worktree/docs services, doc-diff + dirty policy, artifact store, run-id, the
+  `DetDocEngine` orchestrator, and the agent layer (`AgentRunner`, `FakeAgentRunner`,
+  and `PiAgentRunner` driving `pi --mode rpc` over strict LF-delimited JSONL).
+- **`swift/DetDocApp`** — the macOS SwiftUI shell plus the `@MainActor @Observable` MVVM+C
+  view models (coordinator/routing, per-screen view models, diff model). Includes the
+  `@main` App, `NSOpenPanel` folder picker, workspace with `NavigationSplitView` + inspector,
+  docs explorer, source/preview editor, run/fix panel with plan & patch approval gates, runs,
+  settings, onboarding. Views are thin; all logic lives in the view models, tested headless
+  via the `DetDocAppTests` target.
 
 ## Requirements
 
@@ -38,22 +38,23 @@ lives under `swift/`:
 - Swift 6 toolchain (Xcode 27+)
 - [`pi`](https://github.com/earendil-works/pi) on `PATH` for real agent runs (a built-in
   `FakeAgentRunner` is used by tests and works offline)
-- [XcodeGen](https://github.com/yonaskolb/XcodeGen) to (re)generate the app project
+- [Tuist](https://tuist.dev) to (re)generate the app project
 
 ## Build and test
 
-Core + view models (headless, no Xcode required):
+Core (headless, no Xcode required):
 
 ```bash
 swift test --package-path swift/DetDocCore
 ```
 
-The macOS app (`DetDocApp.xcodeproj` is generated and git-ignored):
+The macOS app and its view-model tests (`DetDocApp.xcodeproj` is generated and git-ignored):
 
 ```bash
 cd swift/DetDocApp
-xcodegen generate
+tuist generate
 xcodebuild build -project DetDocApp.xcodeproj -scheme DetDocApp -destination 'platform=macOS'
+xcodebuild test  -project DetDocApp.xcodeproj -scheme DetDocApp -destination 'platform=macOS'
 # or: open DetDocApp.xcodeproj   # then build/run in Xcode
 ```
 

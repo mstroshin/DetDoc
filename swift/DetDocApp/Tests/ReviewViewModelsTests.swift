@@ -1,5 +1,5 @@
 import Testing
-@testable import DetDocViewModels
+@testable import DetDoc
 @testable import DetDocCore
 
 @MainActor

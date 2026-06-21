@@ -1,5 +1,4 @@
 import AppKit
-import DetDocViewModels
 
 /// FolderPicking backed by NSOpenPanel (the only AppKit dependency).
 struct SystemFolderPicker: FolderPicking {

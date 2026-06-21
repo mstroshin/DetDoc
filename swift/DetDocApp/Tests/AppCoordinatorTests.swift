@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import DetDocViewModels
+@testable import DetDoc
 @testable import DetDocCore
 
 private struct StubPicker: FolderPicking {

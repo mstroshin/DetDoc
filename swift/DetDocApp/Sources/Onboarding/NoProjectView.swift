@@ -1,5 +1,4 @@
 import SwiftUI
-import DetDocViewModels
 
 struct NoProjectView: View {
     @Environment(AppCoordinator.self) private var coordinator

@@ -1,5 +1,4 @@
 import SwiftUI
-import DetDocViewModels
 import DetDocCore
 
 struct PlanReviewView: View {

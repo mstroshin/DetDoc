@@ -1,5 +1,4 @@
 import SwiftUI
-import DetDocViewModels
 
 struct PatchReviewView: View {
     let patch: PatchReviewViewModel
