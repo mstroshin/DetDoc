@@ -33,6 +33,13 @@ public final class DocEditorViewModel {
         isDirty = false
     }
 
+    public func clear() {
+        selectedPath = nil
+        source = ""
+        isDirty = false
+        error = nil
+    }
+
     public func edit(_ text: String) {
         source = text
         isDirty = true

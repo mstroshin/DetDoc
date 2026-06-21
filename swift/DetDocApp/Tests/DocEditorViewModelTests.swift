@@ -44,3 +44,17 @@ import Testing
     #expect(vm.isDirty == false)
     #expect(vm.error == nil)
 }
+
+@MainActor
+@Test func clearResetsEditorState() async throws {
+    let fx = try await VMGitFixture()
+    try await fx.detdocInit()
+    let vm = DocEditorViewModel(root: fx.root, config: .default)
+    vm.open("docs/idea.md")
+    vm.edit("changed\n")
+    vm.clear()
+    #expect(vm.selectedPath == nil)
+    #expect(vm.source == "")
+    #expect(vm.isDirty == false)
+    #expect(vm.error == nil)
+}
