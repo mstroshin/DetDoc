@@ -219,6 +219,7 @@ struct LivePreviewTextView: NSViewRepresentable {
         }
 
         func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
+            guard NSApp.currentEvent?.modifierFlags.contains(.command) == true else { return false }
             let raw: String?
             if let s = link as? String { raw = s }
             else if let url = link as? URL { raw = url.absoluteString.removingPercentEncoding ?? url.absoluteString }
