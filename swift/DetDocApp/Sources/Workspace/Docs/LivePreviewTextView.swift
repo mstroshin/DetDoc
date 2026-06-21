@@ -82,6 +82,8 @@ struct LivePreviewTextView: NSViewRepresentable {
         let quickLook = ImageQuickLookSource()
         private var cachedCandidates: [DocCandidate] = []
         private var lastCaret = 0
+        private var pendingCanvasInsertIndex = 0
+        private var canvasSheet: NSWindow?
 
         init(editor: DocEditorViewModel, resolver: DocLinkResolver,
              imageImporter: DocImageImporter,
@@ -315,6 +317,45 @@ struct LivePreviewTextView: NSViewRepresentable {
             let f = DateFormatter()
             f.dateFormat = "yyyyMMdd-HHmmss"
             return "image-\(f.string(from: Date()))"
+        }
+
+        // MARK: - Canvas sketch
+
+        /// Whether the "Создать канвас" context-menu item should be offered — only
+        /// when a document is open (so the sketch has an `assets/` folder to land in).
+        var canCreateCanvas: Bool { editor.selectedPath != nil }
+
+        /// Invoked by the context-menu item; `index` is the click's char offset.
+        @objc func createCanvasMenuAction(_ sender: NSMenuItem) {
+            let index = (sender.representedObject as? Int) ?? (textView?.selectedRange().location ?? 0)
+            presentCanvasSheet(insertAt: index)
+        }
+
+        private func presentCanvasSheet(insertAt index: Int) {
+            guard canvasSheet == nil, let host = textView?.window else { return }
+            pendingCanvasInsertIndex = index
+            let view = CanvasSketchView(
+                onInsert: { [weak self] data in self?.finishCanvas(with: data) },
+                onCancel: { [weak self] in self?.dismissCanvasSheet() }
+            )
+            let sheet = NSWindow(contentViewController: NSHostingController(rootView: view))
+            sheet.setContentSize(NSSize(width: 640, height: 520))
+            canvasSheet = sheet
+            host.beginSheet(sheet) { [weak self] _ in self?.canvasSheet = nil }
+        }
+
+        private func dismissCanvasSheet() {
+            guard let sheet = canvasSheet else { return }
+            (sheet.sheetParent ?? textView?.window)?.endSheet(sheet)
+        }
+
+        private func finishCanvas(with data: Data) {
+            defer { dismissCanvasSheet() }
+            guard let docPath = editor.selectedPath, let tv = textView,
+                  let token = try? imageImporter.importData(data, basename: Self.generatedBasename(), forDoc: docPath)
+            else { return }
+            let idx = max(0, min(pendingCanvasInsertIndex, (tv.string as NSString).length))
+            insertImageTokens([token], at: idx, in: tv)
         }
 
         // MARK: - Completion logic

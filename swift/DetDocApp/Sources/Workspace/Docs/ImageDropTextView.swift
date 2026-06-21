@@ -17,6 +17,22 @@ final class ImageDropTextView: NSTextView {
         super.paste(sender)
     }
 
+    // Prepend "Add drawing…" to the right-click menu. The click's char index is
+    // stashed on the item so the resulting sketch inserts where the user clicked.
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let menu = super.menu(for: event) ?? NSMenu()
+        guard let coordinator, coordinator.canCreateCanvas else { return menu }
+        let point = convert(event.locationInWindow, from: nil)
+        let item = NSMenuItem(title: "Add drawing…",
+                              action: #selector(LivePreviewTextView.Coordinator.createCanvasMenuAction(_:)),
+                              keyEquivalent: "")
+        item.target = coordinator
+        item.representedObject = characterIndexForInsertion(at: point)
+        menu.insertItem(item, at: 0)
+        menu.insertItem(.separator(), at: 1)
+        return menu
+    }
+
     // QLPreviewPanel follows the responder chain: this text view declares itself the
     // controller so the panel adopts the coordinator's data source. Direct dataSource
     // assignment is fragile — the panel re-queries the responder chain on key changes.
