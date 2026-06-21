@@ -1,15 +1,18 @@
 import SwiftUI
 import AppKit
+import Quartz
 import DetDocCore
 
 struct LivePreviewTextView: NSViewRepresentable {
     @Bindable var editor: DocEditorViewModel
     var resolver: DocLinkResolver
+    var imageImporter: DocImageImporter
     var candidatesProvider: () -> [DocCandidate]
     var onFollowLink: (String) -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator(editor: editor, resolver: resolver,
+                    imageImporter: imageImporter,
                     candidatesProvider: candidatesProvider,
                     onFollowLink: onFollowLink)
     }
@@ -37,6 +40,7 @@ struct LivePreviewTextView: NSViewRepresentable {
     func updateNSView(_ nsView: NSScrollView, context: Context) {
         context.coordinator.editor = editor
         context.coordinator.resolver = resolver
+        context.coordinator.imageImporter = imageImporter
         context.coordinator.candidatesProvider = candidatesProvider
         context.coordinator.onFollowLink = onFollowLink
         guard let tv = nsView.documentView as? NSTextView else { return }
@@ -49,20 +53,24 @@ struct LivePreviewTextView: NSViewRepresentable {
     final class Coordinator: NSObject, NSTextViewDelegate, @preconcurrency NSTextContentStorageDelegate {
         var editor: DocEditorViewModel
         var resolver: DocLinkResolver
+        var imageImporter: DocImageImporter
         var candidatesProvider: () -> [DocCandidate]
         var onFollowLink: (String) -> Void
         weak var textView: NSTextView?
 
         let completion = DocLinkCompletionModel()
         private var panel: NSPanel?
+        private let quickLook = ImageQuickLookSource()
         private var cachedCandidates: [DocCandidate] = []
         private var lastCaret = 0
 
         init(editor: DocEditorViewModel, resolver: DocLinkResolver,
+             imageImporter: DocImageImporter,
              candidatesProvider: @escaping () -> [DocCandidate],
              onFollowLink: @escaping (String) -> Void) {
             self.editor = editor
             self.resolver = resolver
+            self.imageImporter = imageImporter
             self.candidatesProvider = candidatesProvider
             self.onFollowLink = onFollowLink
         }
@@ -75,7 +83,8 @@ struct LivePreviewTextView: NSViewRepresentable {
             let raw = storage.attributedSubstring(from: range)
             let spans = MarkdownStyleScanner.scan(raw.string)
             let refs = DocRefScanner.scan(raw.string)
-            if spans.isEmpty && refs.isEmpty { return nil }   // plain paragraph -> default rendering
+            let imageRefs = ImageRefScanner.scan(raw.string)
+            if spans.isEmpty && refs.isEmpty && imageRefs.isEmpty { return nil }   // plain paragraph -> default rendering
 
             let display = NSMutableAttributedString(attributedString: raw)
             let full = NSRange(location: 0, length: (raw.string as NSString).length)
@@ -137,6 +146,27 @@ struct LivePreviewTextView: NSViewRepresentable {
                 // If resolver returns nil (empty path), nothing is styled — token stays as-is.
             }
 
+            // --- @-token images ---
+            for img in imageRefs {
+                let absStart = paraStart + img.range.location
+                let absEnd = absStart + img.range.length
+                let caretInToken = caret >= absStart && caret < absEnd
+
+                if let url = imageImporter.resolve(img.path) {
+                    display.addAttribute(.foregroundColor, value: NSColor.linkColor, range: img.range)
+                    if !caretInToken {
+                        let attachment = DocImageAttachment(url: url) { [weak self] in
+                            self?.openQuickLook(url)
+                        }
+                        modifications.append((range: img.range, replacement: NSAttributedString(attachment: attachment)))
+                    }
+                } else {
+                    display.addAttribute(.foregroundColor, value: NSColor.systemRed, range: img.range)
+                    display.addAttribute(.underlineStyle, value: NSUnderlineStyle.patternDot.rawValue | NSUnderlineStyle.single.rawValue, range: img.range)
+                    display.addAttribute(.toolTip, value: "Missing image: \(img.path)", range: img.range)
+                }
+            }
+
             // Apply highest-offset-first so earlier paragraph-local offsets stay valid.
             for mod in modifications.sorted(by: { $0.range.location > $1.range.location }) {
                 if let replacement = mod.replacement {
@@ -181,6 +211,14 @@ struct LivePreviewTextView: NSViewRepresentable {
             panel = nil
         }
 
+        func openQuickLook(_ url: URL) {
+            quickLook.url = url
+            guard let panel = QLPreviewPanel.shared() else { return }
+            panel.dataSource = quickLook
+            panel.makeKeyAndOrderFront(nil)
+            panel.reloadData()
+        }
+
         // MARK: - Completion logic
 
         private func updateCompletion(allowOpen: Bool) {
@@ -218,16 +256,17 @@ struct LivePreviewTextView: NSViewRepresentable {
 
         // MARK: - Refresh helper
 
-        /// Returns the document-absolute NSRange of the @-token span (if any) that
-        /// contains `caret`, or nil if the caret is not inside a token.
-        private func linkRange(atCaret caret: Int) -> NSRange? {
+        /// Returns the document-absolute NSRange of the @-token span (doc link OR
+        /// image) that contains `caret`, or nil if the caret is not inside a token.
+        private func tokenRange(atCaret caret: Int) -> NSRange? {
             guard let storage = textView?.textStorage, caret >= 0, caret <= storage.length else { return nil }
             let ns = storage.string as NSString
             let para = ns.paragraphRange(for: NSRange(location: min(caret, max(0, ns.length - 1)), length: 0))
             let paraStr = ns.substring(with: para)
-            for ref in DocRefScanner.scan(paraStr) {
-                let absStart = para.location + ref.range.location
-                let absEnd = absStart + ref.range.length
+            let ranges = DocRefScanner.scan(paraStr).map(\.range) + ImageRefScanner.scan(paraStr).map(\.range)
+            for r in ranges {
+                let absStart = para.location + r.location
+                let absEnd = absStart + r.length
                 if caret >= absStart && caret < absEnd { return NSRange(location: absStart, length: absEnd - absStart) }
             }
             return nil
@@ -258,9 +297,9 @@ struct LivePreviewTextView: NSViewRepresentable {
 
         func textViewDidChangeSelection(_ notification: Notification) {
             let new = textView?.selectedRange().location ?? 0
-            let oldLink = linkRange(atCaret: lastCaret)
-            let newLink = linkRange(atCaret: new)
-            if oldLink != newLink {
+            let oldToken = tokenRange(atCaret: lastCaret)
+            let newToken = tokenRange(atCaret: new)
+            if oldToken != newToken {
                 refreshCaretParagraphs(old: lastCaret, new: new)
             }
             lastCaret = new
@@ -298,5 +337,16 @@ struct LivePreviewTextView: NSViewRepresentable {
             onFollowLink(String(s.dropFirst("detdoc://".count)))
             return true
         }
+    }
+}
+
+// QLPreviewPanel's data-source methods are nonisolated in the SDK but the panel only
+// drives them on the main thread; @preconcurrency + @MainActor satisfies Swift 6.
+@MainActor
+final class ImageQuickLookSource: NSObject, @preconcurrency QLPreviewPanelDataSource {
+    var url: URL?
+    func numberOfPreviewItems(in panel: QLPreviewPanel) -> Int { url == nil ? 0 : 1 }
+    func previewPanel(_ panel: QLPreviewPanel, previewItemAt index: Int) -> any QLPreviewItem {
+        (url as NSURL?) ?? NSURL(fileURLWithPath: "/")
     }
 }

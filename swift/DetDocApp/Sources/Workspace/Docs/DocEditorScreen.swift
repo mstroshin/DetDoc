@@ -4,6 +4,7 @@ import DetDocCore
 struct DocEditorScreen: View {
     @Bindable var editor: DocEditorViewModel
     var resolver: DocLinkResolver
+    var imageImporter: DocImageImporter
     var candidatesProvider: () -> [DocCandidate]
     var onFollowLink: (String) -> Void
 
@@ -13,6 +14,7 @@ struct DocEditorScreen: View {
                 ContentUnavailableView("Select a document", systemImage: "doc.text", description: Text("Pick a Markdown file from the sidebar."))
             } else {
                 LivePreviewTextView(editor: editor, resolver: resolver,
+                                   imageImporter: imageImporter,
                                    candidatesProvider: candidatesProvider,
                                    onFollowLink: onFollowLink)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)

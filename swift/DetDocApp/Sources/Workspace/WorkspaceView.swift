@@ -36,6 +36,8 @@ struct WorkspaceView: View {
         return DocLinkResolver(candidates: Set(svc.candidates().map(\.docsRelativePath)))
     }
 
+    private var imageImporter: DocImageImporter { DocImageImporter(root: root) }
+
     var body: some View {
         NavigationSplitView {
             DocsExplorerView(tree: tree, selection: $selectedDoc,
@@ -44,6 +46,7 @@ struct WorkspaceView: View {
                 .navigationTitle("Docs")
         } detail: {
             DocEditorScreen(editor: editor, resolver: linkResolver,
+                            imageImporter: imageImporter,
                             candidatesProvider: {
                                 let svc = DocsService(root: root, config: self.config)
                                 return svc.candidates()
