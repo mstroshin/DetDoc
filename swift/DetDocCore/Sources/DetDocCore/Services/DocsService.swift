@@ -67,6 +67,33 @@ public struct DocsService: Sendable {
         }
     }
 
+    public func listDirectories() -> [String] {
+        let docsDir = root.appendingPathComponent("docs")
+        guard let enumerator = FileManager.default.enumerator(at: docsDir, includingPropertiesForKeys: [.isDirectoryKey]) else {
+            return []
+        }
+        var dirs: [String] = []
+        for case let url as URL in enumerator {
+            let values = try? url.resourceValues(forKeys: [.isDirectoryKey])
+            if values?.isDirectory == true {
+                dirs.append(relativePath(url))
+            }
+        }
+        return dirs.sorted()
+    }
+
+    public func createDirectory(_ path: String) throws {
+        let url = root.appendingPathComponent(path)
+        if FileManager.default.fileExists(atPath: url.path) {
+            throw DetDocError("DOC_ALREADY_EXISTS", path)
+        }
+        do {
+            try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        } catch {
+            throw DetDocError("DOC_WRITE_FAILED", "\(path): \(error)")
+        }
+    }
+
     private func relativePath(_ url: URL) -> String {
         let rootComponents = root.standardizedFileURL.pathComponents
         let urlComponents = url.standardizedFileURL.pathComponents

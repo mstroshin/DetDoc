@@ -30,3 +30,25 @@ private func docsService() -> (TempDir, DocsService) {
     try svc.delete("docs/y.md")
     #expect(svc.list().isEmpty)
 }
+
+@Test func listDirectoriesReturnsSubdirsSorted() throws {
+    let (tmp, svc) = docsService()
+    try FileManager.default.createDirectory(at: tmp.url.appendingPathComponent("docs/b/c"), withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: tmp.url.appendingPathComponent("docs/a"), withIntermediateDirectories: true)
+    try "x".write(to: tmp.url.appendingPathComponent("docs/a/f.md"), atomically: true, encoding: .utf8)
+    #expect(svc.listDirectories() == ["docs/a", "docs/b", "docs/b/c"])
+}
+
+@Test func listDirectoriesEmptyWhenNoDocs() throws {
+    let (_, svc) = docsService()
+    #expect(svc.listDirectories().isEmpty)
+}
+
+@Test func createDirectoryMakesDirAndRejectsDuplicate() throws {
+    let (tmp, svc) = docsService()
+    try svc.createDirectory("docs/new")
+    var isDir: ObjCBool = false
+    #expect(FileManager.default.fileExists(atPath: tmp.url.appendingPathComponent("docs/new").path, isDirectory: &isDir))
+    #expect(isDir.boolValue)
+    #expect(throws: DetDocError.self) { try svc.createDirectory("docs/new") }
+}
