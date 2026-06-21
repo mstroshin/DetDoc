@@ -35,3 +35,10 @@ import Testing
     let q = DocLinkCompletion.activeQuery(in: src, cursorUTF16Offset: (src as NSString).length)
     #expect(q?.query == "s")
 }
+
+@Test func activeQueryRangeSpansWholeTokenWhenCaretMidToken() {
+    // "@guides/setup", caret after "@gui" (offset 4)
+    let q = DocLinkCompletion.activeQuery(in: "@guides/setup", cursorUTF16Offset: 4)
+    #expect(q?.query == "gui")
+    #expect(q?.range == NSRange(location: 0, length: 13))   // whole "@guides/setup"
+}

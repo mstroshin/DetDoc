@@ -47,3 +47,12 @@ import Testing
     #expect(refs.count == 1)
     #expect(refs[0].path == "страница")
 }
+
+@Test func scanTrimsTrailingPunctuation() {
+    // "see @guides/setup." — trailing dot is sentence punctuation, not part of path
+    let refs = DocRefScanner.scan("see @guides/setup.")
+    #expect(refs.count == 1)
+    #expect(refs[0].path == "guides/setup")
+    // range covers "@guides/setup" (13 chars) starting at offset 4, NOT the trailing dot
+    #expect(refs[0].range == NSRange(location: 4, length: 13))
+}

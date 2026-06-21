@@ -183,7 +183,7 @@ struct LivePreviewTextView: NSViewRepresentable {
 
         // MARK: - Completion logic
 
-        private func updateCompletion() {
+        private func updateCompletion(allowOpen: Bool) {
             guard let tv = textView else { return }
             let cursor = tv.selectedRange().location
             guard let q = DocLinkCompletion.activeQuery(in: tv.string, cursorUTF16Offset: cursor) else {
@@ -193,11 +193,13 @@ struct LivePreviewTextView: NSViewRepresentable {
             if !completion.isActive { cachedCandidates = candidatesProvider() }
             if completion.isActive {
                 completion.update(query: q, caretRect: .zero, candidates: cachedCandidates)
+                positionPanel()
             } else {
+                guard allowOpen else { return }
                 completion.begin(query: q, caretRect: .zero, candidates: cachedCandidates)
+                if panel == nil { showPanel() }
+                positionPanel()
             }
-            if panel == nil { showPanel() }
-            positionPanel()
         }
 
         private func commitCompletion() {
@@ -251,7 +253,7 @@ struct LivePreviewTextView: NSViewRepresentable {
             editor.edit(tv.string)
             // Editing already makes the content storage re-run the delegate for changed
             // paragraphs, so no manual refresh needed here.
-            updateCompletion()
+            updateCompletion(allowOpen: true)
         }
 
         func textViewDidChangeSelection(_ notification: Notification) {
@@ -262,7 +264,7 @@ struct LivePreviewTextView: NSViewRepresentable {
                 refreshCaretParagraphs(old: lastCaret, new: new)
             }
             lastCaret = new
-            updateCompletion()
+            updateCompletion(allowOpen: false)
         }
 
         // Dismiss the picker when the text view loses focus.

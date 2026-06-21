@@ -13,8 +13,13 @@ public enum DocRefScanner {
     public static func scan(_ text: String) -> [DocRef] {
         let ns = text as NSString
         let re = try! NSRegularExpression(pattern: #"(?<![^\s])@([\p{L}\p{N}/_.\-]+)"#)
-        return re.matches(in: text, range: NSRange(location: 0, length: ns.length)).map {
-            DocRef(range: $0.range, path: ns.substring(with: $0.range(at: 1)))
+        return re.matches(in: text, range: NSRange(location: 0, length: ns.length)).compactMap { m in
+            let full = m.range
+            var path = ns.substring(with: m.range(at: 1))
+            var len = full.length
+            while let last = path.last, "./-_".contains(last) { path.removeLast(); len -= 1 }
+            guard !path.isEmpty else { return nil }
+            return DocRef(range: NSRange(location: full.location, length: len), path: path)
         }
     }
 }

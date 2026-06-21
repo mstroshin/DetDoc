@@ -16,3 +16,8 @@ import Testing
     let r = DocLinkResolver(candidates: ["guides/setup.md"])
     #expect(r.resolve("/guides/setup") == .init(docsRelativePath: "guides/setup.md", docPath: "docs/guides/setup.md", exists: true))
 }
+
+@Test func resolveHandsTypedMdSuffixIsTolerated() {
+    let r = DocLinkResolver(candidates: ["guides/setup.md"])
+    #expect(r.resolve("guides/setup.md") == .init(docsRelativePath: "guides/setup.md", docPath: "docs/guides/setup.md", exists: true))
+}

@@ -17,8 +17,10 @@ public enum DocLinkCompletion {
                 let at = i - 1
                 let boundary = at == 0 || isWhitespace(ns.character(at: at - 1))
                 guard boundary else { return nil }
+                var end = cursor
+                while end < ns.length, isQueryChar(ns.character(at: end)) { end += 1 }
                 let query = ns.substring(with: NSRange(location: i, length: cursor - i))
-                return ActiveQuery(range: NSRange(location: at, length: cursor - at), query: query)
+                return ActiveQuery(range: NSRange(location: at, length: end - at), query: query)
             }
             guard isQueryChar(c) else { return nil }
             i -= 1

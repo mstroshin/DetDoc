@@ -16,7 +16,8 @@ public struct DocLinkResolver: Sendable {
     public func resolve(_ tokenPath: String) -> Resolution? {
         let path = tokenPath.hasPrefix("/") ? String(tokenPath.dropFirst()) : tokenPath
         guard !path.isEmpty else { return nil }
-        let docsRel = path + ".md"
+        let trimmed = path.hasSuffix(".md") ? String(path.dropLast(3)) : path
+        let docsRel = trimmed + ".md"
         return Resolution(docsRelativePath: docsRel, docPath: "docs/\(docsRel)", exists: existing.contains(docsRel))
     }
 }
