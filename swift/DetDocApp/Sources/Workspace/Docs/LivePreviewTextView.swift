@@ -28,7 +28,9 @@ struct LivePreviewTextView: NSViewRepresentable {
         tv.isAutomaticDashSubstitutionEnabled = false
         tv.isAutomaticLinkDetectionEnabled = false
         context.coordinator.textView = tv
-        context.coordinator.applyStyling()
+        if let tcs = tv.textLayoutManager?.textContentManager as? NSTextContentStorage {
+            tcs.delegate = context.coordinator
+        }
         return scroll
     }
 
@@ -40,12 +42,12 @@ struct LivePreviewTextView: NSViewRepresentable {
         guard let tv = nsView.documentView as? NSTextView else { return }
         if tv.string != editor.source {           // external change (open/clear)
             tv.string = editor.source
-            context.coordinator.applyStyling()
+            context.coordinator.refreshCaretParagraphs(old: 0, new: 0)
         }
     }
 
     @MainActor
-    final class Coordinator: NSObject, NSTextViewDelegate {
+    final class Coordinator: NSObject, NSTextViewDelegate, @preconcurrency NSTextContentStorageDelegate {
         var editor: DocEditorViewModel
         var resolver: DocLinkResolver
         var candidatesProvider: () -> [DocCandidate]
@@ -55,8 +57,7 @@ struct LivePreviewTextView: NSViewRepresentable {
         let completion = DocLinkCompletionModel()
         private var panel: NSPanel?
         private var cachedCandidates: [DocCandidate] = []
-        private var lastStyledString: String = ""
-        private var lastScannedSpans: [MarkdownSpan] = []
+        private var lastCaret = 0
 
         init(editor: DocEditorViewModel, resolver: DocLinkResolver,
              candidatesProvider: @escaping () -> [DocCandidate],
@@ -65,6 +66,66 @@ struct LivePreviewTextView: NSViewRepresentable {
             self.resolver = resolver
             self.candidatesProvider = candidatesProvider
             self.onFollowLink = onFollowLink
+        }
+
+        // MARK: - NSTextContentStorageDelegate
+
+        func textContentStorage(_ tcs: NSTextContentStorage, textParagraphWith range: NSRange) -> NSTextParagraph? {
+            guard let storage = tcs.textStorage, range.location >= 0,
+                  range.location + range.length <= storage.length else { return nil }
+            let raw = storage.attributedSubstring(from: range)
+            let spans = MarkdownStyleScanner.scan(raw.string)
+            if spans.isEmpty { return nil }   // plain paragraph -> default rendering
+
+            let display = NSMutableAttributedString(attributedString: raw)
+            let full = NSRange(location: 0, length: (raw.string as NSString).length)
+            display.setAttributes([
+                .font: NSFont.monospacedSystemFont(ofSize: 13, weight: .regular),
+                .foregroundColor: NSColor.textColor,
+            ], range: full)
+
+            let caret = textView?.selectedRange().location ?? -1
+            let paraStart = range.location
+            var deletes: [NSRange] = []   // paragraph-local syntax ranges to remove (collapsed links)
+
+            for span in spans {
+                switch span.kind {
+                case let .heading(level):
+                    let size: CGFloat = [1: 22, 2: 19, 3: 16].first { $0.key == level }?.value ?? 14
+                    display.addAttribute(.font, value: NSFont.monospacedSystemFont(ofSize: size, weight: .bold), range: span.range)
+                case .bold:
+                    display.addAttribute(.font, value: NSFont.monospacedSystemFont(ofSize: 13, weight: .bold), range: span.range)
+                case .italic:
+                    if let it = NSFontManager.shared.convert(.monospacedSystemFont(ofSize: 13, weight: .regular), toHaveTrait: .italicFontMask) as NSFont? {
+                        display.addAttribute(.font, value: it, range: span.range)
+                    }
+                case let .link(destination, textRange):
+                    let absStart = paraStart + span.range.location
+                    let absEnd = absStart + span.range.length
+                    let caretInLink = caret >= absStart && caret <= absEnd
+                    if let res = resolver.resolve(destination) {
+                        let color: NSColor = res.exists ? .linkColor : .systemRed
+                        display.addAttribute(.foregroundColor, value: color, range: span.range)
+                        if !res.exists {
+                            display.addAttribute(.underlineStyle, value: NSUnderlineStyle.patternDot.rawValue | NSUnderlineStyle.single.rawValue, range: span.range)
+                            display.addAttribute(.toolTip, value: "Missing: \(res.docsRelativePath)", range: span.range)
+                        }
+                        if res.exists {
+                            display.addAttribute(.link, value: "detdoc://\(res.docPath)", range: span.range)
+                        }
+                    }
+                    if !caretInLink {
+                        // collapse: delete leading "[" and trailing "](dest)", keep only the link text
+                        let linkLoc = span.range.location, linkEnd = span.range.location + span.range.length
+                        let textLoc = textRange.location, textEnd = textRange.location + textRange.length
+                        deletes.append(NSRange(location: textEnd, length: linkEnd - textEnd))   // trailing "](dest)"
+                        deletes.append(NSRange(location: linkLoc, length: textLoc - linkLoc))    // leading "["
+                    }
+                }
+            }
+            // Delete highest-offset-first so earlier paragraph-local offsets stay valid.
+            for r in deletes.sorted(by: { $0.location > $1.location }) { display.deleteCharacters(in: r) }
+            return NSTextParagraph(attributedString: display)
         }
 
         // MARK: - Panel management
@@ -128,7 +189,24 @@ struct LivePreviewTextView: NSViewRepresentable {
             }
             editor.edit(tv.string)
             hidePanel()
-            applyStyling()
+            // Force refresh of the paragraph containing the inserted link so it collapses immediately.
+            let insertEnd = ins.range.location + (ins.text as NSString).length
+            refreshCaretParagraphs(old: insertEnd, new: insertEnd)
+        }
+
+        // MARK: - Refresh helper
+
+        func refreshCaretParagraphs(old: Int, new: Int) {
+            guard let storage = textView?.textStorage else { return }
+            let ns = storage.string as NSString
+            func paraRange(_ loc: Int) -> NSRange {
+                let l = max(0, min(loc, ns.length))
+                return ns.paragraphRange(for: NSRange(location: l, length: 0))
+            }
+            let union = NSUnionRange(paraRange(old), paraRange(new))
+            storage.beginEditing()
+            storage.edited(.editedAttributes, range: union, changeInLength: 0)
+            storage.endEditing()
         }
 
         // MARK: - NSTextViewDelegate
@@ -136,12 +214,15 @@ struct LivePreviewTextView: NSViewRepresentable {
         func textDidChange(_ notification: Notification) {
             guard let tv = textView else { return }
             editor.edit(tv.string)
-            applyStyling()
+            // Editing already makes the content storage re-run the delegate for changed
+            // paragraphs, so no manual refresh needed here.
             updateCompletion()
         }
 
         func textViewDidChangeSelection(_ notification: Notification) {
-            applyStyling()
+            let new = textView?.selectedRange().location ?? 0
+            refreshCaretParagraphs(old: lastCaret, new: new)
+            lastCaret = new
             updateCompletion()
         }
 
@@ -164,58 +245,6 @@ struct LivePreviewTextView: NSViewRepresentable {
             default:
                 return false
             }
-        }
-
-        func applyStyling() {
-            guard let tv = textView, let storage = tv.textStorage else { return }
-            let full = NSRange(location: 0, length: (tv.string as NSString).length)
-            let caret = tv.selectedRange()
-            // Restyle guard: skip the expensive scan when the string hasn't changed
-            // since the last style pass (pure cursor move). Reuse cached spans so
-            // link reveal-under-caret still updates correctly as the caret moves.
-            let spans: [MarkdownSpan]
-            if tv.string == lastStyledString {
-                spans = lastScannedSpans
-            } else {
-                spans = MarkdownStyleScanner.scan(tv.string)
-                lastScannedSpans = spans
-                lastStyledString = tv.string
-            }
-
-            storage.beginEditing()
-            storage.setAttributes([
-                .font: NSFont.monospacedSystemFont(ofSize: 13, weight: .regular),
-                .foregroundColor: NSColor.textColor,
-            ], range: full)
-
-            let styledLinks = MarkdownStyleApplier.styledLinkRanges(spans: spans, caret: caret)
-            for span in spans {
-                switch span.kind {
-                case let .heading(level):
-                    let size: CGFloat = [1: 22, 2: 19, 3: 16].first { $0.key == level }?.value ?? 14
-                    storage.addAttribute(.font, value: NSFont.monospacedSystemFont(ofSize: size, weight: .bold), range: span.range)
-                case .bold:
-                    storage.addAttribute(.font, value: NSFont.monospacedSystemFont(ofSize: 13, weight: .bold), range: span.range)
-                case .italic:
-                    if let italic = NSFontManager.shared.convert(.monospacedSystemFont(ofSize: 13, weight: .regular), toHaveTrait: .italicFontMask) as NSFont? {
-                        storage.addAttribute(.font, value: italic, range: span.range)
-                    }
-                case let .link(destination, _):
-                    let isStyled = styledLinks.contains(span)
-                    if let res = resolver.resolve(destination) {
-                        let color: NSColor = res.exists ? .linkColor : .systemRed
-                        storage.addAttribute(.foregroundColor, value: color, range: span.range)
-                        if !res.exists {
-                            storage.addAttribute(.underlineStyle, value: NSUnderlineStyle.patternDot.rawValue | NSUnderlineStyle.single.rawValue, range: span.range)
-                            storage.addAttribute(.toolTip, value: "Missing: \(res.docsRelativePath)", range: span.range)
-                        }
-                        if isStyled, res.exists {
-                            storage.addAttribute(.link, value: "detdoc://\(res.docPath)", range: span.range)
-                        }
-                    }
-                }
-            }
-            storage.endEditing()
         }
 
         func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
