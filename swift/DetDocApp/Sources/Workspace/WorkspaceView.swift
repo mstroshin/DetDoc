@@ -3,6 +3,7 @@ import DetDocCore
 
 struct WorkspaceView: View {
     let root: URL
+    private let config: DetDocConfig
 
     @State private var workspace: WorkspaceViewModel
     @State private var editor: DocEditorViewModel
@@ -20,6 +21,7 @@ struct WorkspaceView: View {
     init(root: URL) {
         self.root = root
         let config = (try? ConfigStore().load(root: root)) ?? .default
+        self.config = config
         let agent = AgentRunnerFactory.make(config: config)
         _workspace = State(initialValue: WorkspaceViewModel(root: root))
         _editor = State(initialValue: DocEditorViewModel(root: root, config: config))
@@ -30,7 +32,7 @@ struct WorkspaceView: View {
     }
 
     private var linkResolver: DocLinkResolver {
-        let svc = DocsService(root: root, config: (try? ConfigStore().load(root: root)) ?? .default)
+        let svc = DocsService(root: root, config: config)
         return DocLinkResolver(candidates: Set(svc.candidates().map(\.docsRelativePath)))
     }
 
@@ -43,7 +45,7 @@ struct WorkspaceView: View {
         } detail: {
             DocEditorScreen(editor: editor, resolver: linkResolver,
                             candidatesProvider: {
-                                let svc = DocsService(root: root, config: (try? ConfigStore().load(root: root)) ?? .default)
+                                let svc = DocsService(root: root, config: self.config)
                                 return svc.candidates()
                             }) { docPath in
                 if !tree.isDirectory(docPath) { selectedDoc = docPath }

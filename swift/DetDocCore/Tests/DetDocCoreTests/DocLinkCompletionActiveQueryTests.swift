@@ -24,3 +24,14 @@ import Testing
     let q = DocLinkCompletion.activeQuery(in: "@guides/se", cursorUTF16Offset: 10)
     #expect(q?.query == "guides/se")
 }
+
+@Test func activeQueryNilWhenCursorBeforeAt() {
+    #expect(DocLinkCompletion.activeQuery(in: "@gu", cursorUTF16Offset: 0) == nil)
+}
+
+@Test func activeQueryHandlesCyrillicBeforeAt() {
+    // "слово @s" — '@' preceded by a space after a Cyrillic word still triggers
+    let src = "слово @s"
+    let q = DocLinkCompletion.activeQuery(in: src, cursorUTF16Offset: (src as NSString).length)
+    #expect(q?.query == "s")
+}

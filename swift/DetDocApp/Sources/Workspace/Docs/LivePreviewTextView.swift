@@ -55,6 +55,8 @@ struct LivePreviewTextView: NSViewRepresentable {
         let completion = DocLinkCompletionModel()
         private var panel: NSPanel?
         private var cachedCandidates: [DocCandidate] = []
+        private var lastStyledString: String = ""
+        private var lastScannedSpans: [MarkdownSpan] = []
 
         init(editor: DocEditorViewModel, resolver: DocLinkResolver,
              candidatesProvider: @escaping () -> [DocCandidate],
@@ -143,6 +145,11 @@ struct LivePreviewTextView: NSViewRepresentable {
             updateCompletion()
         }
 
+        // Dismiss the picker when the text view loses focus.
+        func textDidEndEditing(_ notification: Notification) {
+            if completion.isActive { completion.cancel(); hidePanel() }
+        }
+
         func textView(_ textView: NSTextView, doCommandBy selector: Selector) -> Bool {
             guard completion.isActive else { return false }
             switch selector {
@@ -163,7 +170,17 @@ struct LivePreviewTextView: NSViewRepresentable {
             guard let tv = textView, let storage = tv.textStorage else { return }
             let full = NSRange(location: 0, length: (tv.string as NSString).length)
             let caret = tv.selectedRange()
-            let spans = MarkdownStyleScanner.scan(tv.string)
+            // Restyle guard: skip the expensive scan when the string hasn't changed
+            // since the last style pass (pure cursor move). Reuse cached spans so
+            // link reveal-under-caret still updates correctly as the caret moves.
+            let spans: [MarkdownSpan]
+            if tv.string == lastStyledString {
+                spans = lastScannedSpans
+            } else {
+                spans = MarkdownStyleScanner.scan(tv.string)
+                lastScannedSpans = spans
+                lastStyledString = tv.string
+            }
 
             storage.beginEditing()
             storage.setAttributes([
