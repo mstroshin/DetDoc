@@ -42,7 +42,6 @@ struct LivePreviewTextView: NSViewRepresentable {
         guard let tv = nsView.documentView as? NSTextView else { return }
         if tv.string != editor.source {           // external change (open/clear)
             tv.string = editor.source
-            context.coordinator.refreshCaretParagraphs(old: 0, new: 0)
         }
     }
 
@@ -102,7 +101,7 @@ struct LivePreviewTextView: NSViewRepresentable {
                 case let .link(destination, textRange):
                     let absStart = paraStart + span.range.location
                     let absEnd = absStart + span.range.length
-                    let caretInLink = caret >= absStart && caret <= absEnd
+                    let caretInLink = caret >= absStart && caret < absEnd
                     if let res = resolver.resolve(destination) {
                         let color: NSColor = res.exists ? .linkColor : .systemRed
                         display.addAttribute(.foregroundColor, value: color, range: span.range)
