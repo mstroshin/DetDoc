@@ -168,7 +168,7 @@ public actor DetDocEngine {
         try store.writeJSON(manifest.runId, "manifest.json", manifest)
 
         emit(.progress(phase: .implement, message: "Agent is editing approved files"))
-        _ = try await agent.implement(ImplementRequest(mode: mode, input: taskInput, config: config, cwd: worktree.path,
+        var agentResult = try await agent.implement(ImplementRequest(mode: mode, input: taskInput, config: config, cwd: worktree.path,
                                                         approvedPlan: proposed, approvedTargets: approvedTargets, progress: nil))
 
         var patch = ""
@@ -191,7 +191,7 @@ public actor DetDocEngine {
                 emit(.progress(phase: .repairValidation, message: "Agent is fixing validation failure (\(attempt)/\(maxRepairAttempts))"))
                 let base = ImplementRequest(mode: mode, input: taskInput, config: config, cwd: worktree.path,
                                             approvedPlan: proposed, approvedTargets: approvedTargets, progress: nil)
-                _ = try await agent.repairValidation(RepairRequest(base: base, validationLog: error.message, attempt: attempt))
+                agentResult = try await agent.repairValidation(RepairRequest(base: base, validationLog: error.message, attempt: attempt))
             }
         }
 
@@ -215,6 +215,7 @@ public actor DetDocEngine {
         keepWorktree = false
         emit(.progress(phase: .postApplyValidation, message: "Running validation in main worktree"))
         try await RunApplier().runPostApplyValidation(root: root, store: store, runId: manifest.runId)
+        try await writeCodeLinks(agentResult.codeLinks, mainRepo: mainRepo, config: config)
         // Run artifacts are only deleted when auto-committing; otherwise they are intentionally
         // retained so the run stays re-appliable, so only announce cleanup in that case.
         if config.apply.autoCommit {
@@ -224,5 +225,21 @@ public actor DetDocEngine {
         try await RunApplier().commitOrStage(repo: mainRepo, runId: manifest.runId, autoCommit: config.apply.autoCommit, store: store)
         return WorktreeOutcome(result: RunFlowResult(runId: manifest.runId, applied: true, patch: patch),
                                keepWorktree: keepWorktree)
+    }
+
+    /// Write the agent's doc→code links as a trailing HTML-comment block into each input
+    /// doc, idempotently. Restricted to docs that are part of this run's input (currently
+    /// dirty docs in main), so the agent can't annotate unrelated files. Staged by the
+    /// subsequent `git add -A`, so links land in the same `DetDoc apply` commit.
+    private func writeCodeLinks(_ links: [CodeLink], mainRepo: GitRepository, config: DetDocConfig) async throws {
+        guard !links.isEmpty else { return }
+        let policy = PathPolicy(config: config)
+        let inputDocs = Set(try await mainRepo.statusPorcelain().map(\.path).filter { policy.isDoc($0) })
+        for (docPath, docLinks) in Dictionary(grouping: links.filter { inputDocs.contains($0.docPath) }, by: \.docPath) {
+            let url = mainRepo.cwd.appendingPathComponent(docPath)
+            guard let original = try? String(contentsOf: url, encoding: .utf8) else { continue }
+            let updated = CodeLinkBlock.apply(to: original, links: docLinks)
+            if updated != original { try updated.write(to: url, atomically: true, encoding: .utf8) }
+        }
     }
 }
