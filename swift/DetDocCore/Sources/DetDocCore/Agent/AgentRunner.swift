@@ -49,7 +49,11 @@ public struct AgentPlanResult: Sendable {
 
 public struct AgentRunResult: Sendable {
     public let usage: TokenUsage
-    public init(usage: TokenUsage = TokenUsage()) { self.usage = usage }
+    public let codeLinks: [CodeLink]
+    public init(usage: TokenUsage = TokenUsage(), codeLinks: [CodeLink] = []) {
+        self.usage = usage
+        self.codeLinks = codeLinks
+    }
 }
 
 public protocol AgentRunner: Sendable {
