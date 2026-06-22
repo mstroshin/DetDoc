@@ -9,6 +9,9 @@ public enum DetDocLog {
     private static let subsystem = "com.detdoc"
     public static let engine = Logger(subsystem: subsystem, category: "engine")
     public static let agent = Logger(subsystem: subsystem, category: "agent")
+    /// Full prompts sent to the agent. Separate category so it can be filtered out
+    /// (Xcode/Console: hide category `prompt`) — prompts are verbose.
+    public static let prompt = Logger(subsystem: subsystem, category: "prompt")
     public static let process = Logger(subsystem: subsystem, category: "process")
     public static let app = Logger(subsystem: subsystem, category: "app")
     public static let run = Logger(subsystem: subsystem, category: "run")

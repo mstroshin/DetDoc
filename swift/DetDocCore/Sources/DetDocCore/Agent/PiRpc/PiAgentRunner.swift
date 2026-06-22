@@ -72,6 +72,7 @@ public struct PiAgentRunner: AgentRunner {
                progress: (@Sendable (AgentImplementationProgress) -> Void)?) async throws -> [PiRpcMessage] {
         let stream = transport.events()
         try await transport.send(PiRpcCodec.encode(SetThinkingLevelCommand(level: thinking)))
+        DetDocLog.prompt.notice("prompt sent (thinking=\(thinking, privacy: .public), \(prompt.count, privacy: .public) chars):\n\(prompt, privacy: .public)")
         try await transport.send(PiRpcCodec.encode(PromptCommand(message: prompt)))
 
         var messages: [PiRpcMessage]?
