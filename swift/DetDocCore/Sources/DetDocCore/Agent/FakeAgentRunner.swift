@@ -3,10 +3,12 @@ import Foundation
 public struct FakeAgentRunner: AgentRunner {
     private let target: String
     private let content: String
+    private let codeLinks: [CodeLink]
 
-    public init(target: String, content: String) {
+    public init(target: String, content: String, codeLinks: [CodeLink] = []) {
         self.target = target
         self.content = content
+        self.codeLinks = codeLinks
     }
 
     public var supportsRepair: Bool { true }
@@ -23,12 +25,12 @@ public struct FakeAgentRunner: AgentRunner {
         }
         try writeTarget(into: request.cwd)
         request.progress?(.write(path: target))
-        return AgentRunResult()
+        return AgentRunResult(codeLinks: codeLinks)
     }
 
     public func repairValidation(_ request: RepairRequest) async throws -> AgentRunResult {
         try writeTarget(into: request.base.cwd)
-        return AgentRunResult()
+        return AgentRunResult(codeLinks: codeLinks)
     }
 
     private func writeTarget(into cwd: URL) throws {

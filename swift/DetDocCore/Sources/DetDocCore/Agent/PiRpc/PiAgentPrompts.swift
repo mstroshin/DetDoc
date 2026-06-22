@@ -45,6 +45,19 @@ public enum PiAgentPrompts {
         ].joined(separator: "\n\n")
     }
 
+    static let linkInstruction = [
+        "After finishing, output a fenced code block tagged `detdoc-links` mapping each",
+        "documentation section you implemented to the code that implements it.",
+        "One line per section: `<doc-path> <heading> -> <File.ext#symbol>[, <File.ext#symbol>…]`.",
+        "Use the exact heading text from the docs (including leading #), repo-relative code",
+        "paths, and symbol names (function/type/method) — never line numbers.",
+        "Only include documentation sections actually realized by this change. If none, omit the block.",
+        "Example:",
+        "```detdoc-links",
+        "docs/spec.md ## Plan approval -> AppCoordinator.swift#approvePlan, PlanGateView.swift#PlanGateView",
+        "```",
+    ].joined(separator: "\n")
+
     public static func implementationPrompt(_ request: ImplementRequest) -> String {
         [
             "You are DetDoc implementation phase.",
@@ -58,6 +71,7 @@ public enum PiAgentPrompts {
             prettyJSON(request.approvedPlan),
             "Original input:",
             request.input,
+            linkInstruction,
         ].joined(separator: "\n\n")
     }
 
@@ -76,6 +90,7 @@ public enum PiAgentPrompts {
             request.validationLog,
             "Original input:",
             request.base.input,
+            linkInstruction,
         ].joined(separator: "\n\n")
     }
 

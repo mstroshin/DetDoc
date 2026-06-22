@@ -41,7 +41,8 @@ private let cwd = URL(fileURLWithPath: "/tmp")
     #expect(prompt.contains("You are DetDoc implementation phase."))
     #expect(prompt.contains("\"summary\""))
     #expect(prompt.contains("src/a.swift"))
-    #expect(prompt.hasSuffix("Original input:\n\nIN"))
+    #expect(prompt.contains("Original input:\n\nIN"))
+    #expect(prompt.hasSuffix(PiAgentPrompts.linkInstruction))
 }
 
 @Test func validationRepairPromptEmbedsLogAndAttempt() {

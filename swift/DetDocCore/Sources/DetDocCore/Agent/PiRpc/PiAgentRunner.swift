@@ -54,7 +54,8 @@ public struct PiAgentRunner: AgentRunner {
         let args = Self.spawnArgs(model: request.config.agent.model, tools: Self.implementationTools)
         let transport = try makeTransport(executable, args, request.cwd)
         let messages = try await drive(transport, thinking: request.config.agent.thinking, prompt: prompt, progress: progress)
-        return AgentRunResult(usage: PiPlanParsing.tokenUsage(messages))
+        let links = PiCodeLinkParsing.parseCodeLinks(fromAssistantText: PiPlanParsing.lastAssistantText(messages))
+        return AgentRunResult(usage: PiPlanParsing.tokenUsage(messages), codeLinks: links)
     }
 
     static func spawnArgs(model: String?, tools: [String]) -> [String] {
