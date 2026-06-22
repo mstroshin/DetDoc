@@ -9,4 +9,11 @@ public protocol PiRpcTransport: Sendable {
     func events() -> AsyncThrowingStream<String, Error>
     /// Close stdin and let pi exit; idempotent.
     func finish() async
+    /// Post-mortem detail (exit status + stderr tail) used to explain a stream that ended
+    /// without a usable result. Default: empty — in-memory fakes have no subprocess.
+    func diagnostics() async -> String
+}
+
+public extension PiRpcTransport {
+    func diagnostics() async -> String { "" }
 }

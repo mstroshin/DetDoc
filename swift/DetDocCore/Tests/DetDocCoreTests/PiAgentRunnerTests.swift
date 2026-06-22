@@ -47,6 +47,45 @@ private let planJSON = "{\"summary\":\"S\",\"changes\":[{\"reason\":\"doc-diff:d
     } throws: { ($0 as? DetDocError)?.code == "PI_RPC_NO_RESULT" }
 }
 
+@Test func noAgentEndErrorIncludesDiagnosticsAndLastEvent() async {
+    // pi emits an error event then exits without agent_end; the runner must surface the
+    // transport diagnostics (exit status + stderr) and the last stdout line it saw.
+    let transport = FakePiTransport(
+        scriptLines: ["{\"type\":\"response\",\"command\":\"prompt\",\"success\":true}",
+                      "{\"type\":\"error\",\"message\":\"rate limited\"}"],
+        diagnostics: "pi exited with status 1\npi stderr: quota exceeded")
+    let runner = PiAgentRunner(executable: "pi") { _, _, _ in transport }
+    await #expect {
+        _ = try await runner.plan(PlanRequest(mode: .run, input: "x", config: .default, cwd: URL(fileURLWithPath: "/tmp")))
+    } throws: { error in
+        guard let e = error as? DetDocError, e.code == "PI_RPC_NO_RESULT" else { return false }
+        return e.message.contains("status 1")
+            && e.message.contains("quota exceeded")
+            && e.message.contains("rate limited")
+    }
+}
+
+@Test func processTransportFlushesUnterminatedFinalRecordOnEOF() async throws {
+    // pi's last write (agent_end) can reach EOF without a trailing newline; the transport
+    // must still deliver that record instead of dropping it (which caused PI_RPC_NO_RESULT).
+    let line = "{\"type\":\"agent_end\",\"messages\":[]}"
+    let transport = try PiProcessTransport(executable: "printf", arguments: ["%s", line],
+                                           cwd: URL(fileURLWithPath: "/tmp"))
+    var received: [String] = []
+    for try await record in transport.events() { received.append(record) }
+    #expect(received == [line])
+}
+
+@Test func processTransportDiagnosticsReportExitStatusAndStderr() async throws {
+    let transport = try PiProcessTransport(executable: "sh", arguments: ["-c", "echo boom >&2; exit 3"],
+                                           cwd: URL(fileURLWithPath: "/tmp"))
+    for try await _ in transport.events() {}  // drain to EOF
+    await transport.finish()
+    let diag = await transport.diagnostics()
+    #expect(diag.contains("status 3"))
+    #expect(diag.contains("boom"))
+}
+
 @Test func passesModelArgWhenConfigured() async throws {
     var config = DetDocConfig.default
     config.agent.model = "anthropic/claude-opus"

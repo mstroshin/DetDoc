@@ -18,6 +18,7 @@ public final class PiProcessTransport: PiRpcTransport, @unchecked Sendable {
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.arguments = [executable] + arguments
         process.currentDirectoryURL = cwd
+        process.environment = SubprocessEnv.augmenting()  // GUI apps lack /opt/homebrew/bin in PATH
         let inPipe = Pipe(), outPipe = Pipe(), errPipe = Pipe()
         process.standardInput = inPipe
         process.standardOutput = outPipe
@@ -58,8 +59,13 @@ public final class PiProcessTransport: PiRpcTransport, @unchecked Sendable {
             stdoutHandle.readabilityHandler = { [weak self] handle in
                 guard let self else { return }
                 let chunk = handle.availableData
-                if chunk.isEmpty {  // EOF
-                    handle.readabilityHandler = nil
+                if chunk.isEmpty {  // EOF — flush any unterminated trailing record (pi's final
+                    handle.readabilityHandler = nil  // agent_end line may arrive without a LF).
+                    self.lock.lock()
+                    let tail = self.stdoutBuffer
+                    self.stdoutBuffer = Data()
+                    self.lock.unlock()
+                    for record in (try? PiRpcCodec.splitRecords(tail)) ?? [] { continuation.yield(record) }
                     continuation.finish()
                     return
                 }
@@ -83,5 +89,23 @@ public final class PiProcessTransport: PiRpcTransport, @unchecked Sendable {
         stderrHandle.readabilityHandler = nil
         try? stdinHandle.close()
         if process.isRunning { process.terminate() }
+    }
+
+    /// Exit status plus the tail of pi's stderr — surfaced when the stream ends without a
+    /// result so transient failures (auth, rate limits, provider errors) aren't a black box.
+    /// Call after `finish()`: the stderr handler is already detached, so the final read is safe.
+    public func diagnostics() async -> String {
+        process.waitUntilExit()
+        let captured: Data = lock.withLock {
+            if let rest = try? stderrHandle.readToEnd() { stderrBuffer.append(rest) }
+            return stderrBuffer
+        }
+        let signaled = process.terminationReason == .uncaughtSignal
+        var lines = ["pi \(signaled ? "killed by signal" : "exited with status") \(process.terminationStatus)"]
+        if let text = String(data: captured, encoding: .utf8) {
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty { lines.append("pi stderr: \(String(trimmed.suffix(2000)))") }
+        }
+        return lines.joined(separator: "\n")
     }
 }

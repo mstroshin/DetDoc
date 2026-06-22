@@ -30,6 +30,7 @@ public enum ProcessRunner {
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.arguments = [executable] + arguments
         process.currentDirectoryURL = cwd
+        process.environment = SubprocessEnv.augmenting()
 
         let outPipe = Pipe()
         let errPipe = Pipe()

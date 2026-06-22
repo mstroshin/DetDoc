@@ -72,8 +72,10 @@ public struct PiAgentRunner: AgentRunner {
         try await transport.send(PiRpcCodec.encode(PromptCommand(message: prompt)))
 
         var messages: [PiRpcMessage]?
+        var lastLine: String?
         do {
             for try await line in stream {
+                lastLine = line
                 switch try PiRpcEvent.decode(line) {
                 case .response(let command, let success, let error):
                     if command == "prompt" && !success {
@@ -96,7 +98,14 @@ public struct PiAgentRunner: AgentRunner {
         }
         await transport.finish()
         guard let messages else {
-            throw DetDocError("PI_RPC_NO_RESULT", "pi ended without an agent_end event")
+            var detail = await transport.diagnostics()
+            if let lastLine {
+                let snippet = lastLine.count > 500 ? String(lastLine.prefix(500)) + "…" : lastLine
+                detail += detail.isEmpty ? "" : "\n"
+                detail += "last event: \(snippet)"
+            }
+            let suffix = detail.isEmpty ? "" : "\n\(detail)"
+            throw DetDocError("PI_RPC_NO_RESULT", "pi ended without an agent_end event\(suffix)")
         }
         return messages
     }
