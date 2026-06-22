@@ -235,7 +235,11 @@ public actor DetDocEngine {
         guard !links.isEmpty else { return }
         let policy = PathPolicy(config: config)
         let inputDocs = Set(try await mainRepo.statusPorcelain().map(\.path).filter { policy.isDoc($0) })
-        for (docPath, docLinks) in Dictionary(grouping: links.filter { inputDocs.contains($0.docPath) }, by: \.docPath) {
+        let filtered = links.filter { inputDocs.contains($0.docPath) }
+        if filtered.isEmpty {
+            DetDocLog.engine.notice("writeCodeLinks: \(links.count, privacy: .public) link(s) produced but none matched an input doc; all dropped")
+        }
+        for (docPath, docLinks) in Dictionary(grouping: filtered, by: \.docPath) {
             let url = mainRepo.cwd.appendingPathComponent(docPath)
             guard let original = try? String(contentsOf: url, encoding: .utf8) else { continue }
             let updated = CodeLinkBlock.apply(to: original, links: docLinks)

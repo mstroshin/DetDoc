@@ -120,9 +120,10 @@ toolbar toggle is on.
 
 - **No links produced** (agent emits nothing / fake runner): write-step strips any
   stale block and otherwise no-ops.
-- **Heading not found in doc** (renamed between plan and apply): the link line is
-  still written (anchor is just text); next run regenerates from the current
-  headings.
+- **Heading renamed between runs**: the engine strips and replaces the entire
+  `detdoc:link` block on every run, so no duplicate or stale block accumulates.
+  Self-healing depends on the agent emitting links keyed to the doc's current
+  headings; the engine does not rewrite a stale anchor that the agent re-emits.
 - **Repair ran**: use the codeLinks from the final (repaired) result.
 - **Doc has a pre-existing block from an earlier run**: `apply` strips it first, so
   no duplication.

@@ -52,4 +52,5 @@ private let cwd = URL(fileURLWithPath: "/tmp")
     #expect(prompt.contains("You are DetDoc validation repair phase."))
     #expect(prompt.contains("Validation failed on attempt 1."))
     #expect(prompt.contains("FAILED: grep"))
+    #expect(prompt.hasSuffix(PiAgentPrompts.linkInstruction))
 }
