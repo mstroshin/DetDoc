@@ -140,7 +140,10 @@ struct LivePreviewTextView: NSViewRepresentable {
             for ref in refs {
                 let absStart = paraStart + ref.range.location
                 let absEnd = absStart + ref.range.length
-                let caretInLink = caret >= absStart && caret < absEnd
+                // Collapsed at BOTH edges; reveals only when the caret steps strictly
+                // inside (arrow into the token), so the bubble never pops open just from
+                // a caret landing on its boundary (click-snap, vertical nav, etc.).
+                let caretInLink = caret > absStart && caret < absEnd
 
                 if let res = resolver.resolve(ref.path) {
                     if res.exists {
@@ -171,7 +174,7 @@ struct LivePreviewTextView: NSViewRepresentable {
             for img in imageRefs {
                 let absStart = paraStart + img.range.location
                 let absEnd = absStart + img.range.length
-                let caretInToken = caret >= absStart && caret < absEnd
+                let caretInToken = caret > absStart && caret < absEnd   // strictly inside — see caretInLink note
 
                 if let url = imageImporter.resolve(img.path) {
                     display.addAttribute(.foregroundColor, value: NSColor.linkColor, range: img.range)
@@ -406,7 +409,9 @@ struct LivePreviewTextView: NSViewRepresentable {
             for r in ranges {
                 let absStart = para.location + r.location
                 let absEnd = absStart + r.length
-                if caret >= absStart && caret < absEnd { return NSRange(location: absStart, length: absEnd - absStart) }
+                // Must match the collapse predicate in textContentStorage(_:textParagraphWith:)
+                // so a refresh fires exactly when the bubble flips collapsed<->revealed.
+                if caret > absStart && caret < absEnd { return NSRange(location: absStart, length: absEnd - absStart) }
             }
             return nil
         }
@@ -448,9 +453,10 @@ struct LivePreviewTextView: NSViewRepresentable {
         // A collapsed token (link bubble or image) is one display glyph standing in for
         // the whole `@token` backing text, so TextKit's hit-testing maps a click in its
         // area to an arbitrary boundary of that range — usually the start, which then
-        // reveals the raw text instead of leaving a caret where the user clicked. Snap a
-        // click-caret that lands in a collapsed token to the side actually clicked:
-        // right half -> end (stays collapsed, ready to delete), left half -> start (reveal).
+        // reveals the raw text instead of leaving a caret where the user clicked. Snap any
+        // click that lands inside a collapsed token to its END: the caret sits just after
+        // the bubble (ready to type behind it) and the bubble never expands from a click.
+        // To edit the link, arrow-left into the token — that reveals the raw @path.
         func textView(_ textView: NSTextView,
                       willChangeSelectionFromCharacterRanges oldSelectedCharRanges: [NSValue],
                       toCharacterRanges newSelectedCharRanges: [NSValue]) -> [NSValue] {
@@ -461,8 +467,7 @@ struct LivePreviewTextView: NSViewRepresentable {
                   let token = collapsedTokenRange(containing: proposed.location)
             else { return newSelectedCharRanges }
 
-            let snapped = clickIsRightOfToken(token) ? token.location + token.length : token.location
-            return [NSValue(range: NSRange(location: snapped, length: 0))]
+            return [NSValue(range: NSRange(location: token.location + token.length, length: 0))]
         }
 
         private func isMouseClick(_ e: NSEvent?) -> Bool {
@@ -496,28 +501,41 @@ struct LivePreviewTextView: NSViewRepresentable {
             return nil
         }
 
-        /// True if the current mouse click is at or past the horizontal midpoint of the
-        /// token's rendered rect. Defaults to true (end) when geometry is unavailable —
-        /// the user's primary case is clicking to the right.
-        private func clickIsRightOfToken(_ token: NSRange) -> Bool {
-            guard let tv = textView, let event = NSApp.currentEvent else { return true }
-            let click = tv.convert(event.locationInWindow, from: nil)
-            var rect = tv.firstRect(forCharacterRange: token, actualRange: nil)
-            if rect == .zero { return true }
-            if let win = tv.window {
-                rect = win.convertFromScreen(rect)
-                rect = tv.convert(rect, from: nil)
-            }
-            return click.x >= rect.midX
-        }
-
         // Dismiss the picker when the text view loses focus.
         func textDidEndEditing(_ notification: Notification) {
             if completion.isActive { completion.cancel(); hidePanel() }
         }
 
         func textView(_ textView: NSTextView, doCommandBy selector: Selector) -> Bool {
-            guard completion.isActive else { return false }
+            if !completion.isActive {
+                // A collapsed bubble is a single atomic glyph, so a plain left/right arrow
+                // skips the whole `@token` instead of entering it. When the caret sits right
+                // against a bubble and the user arrows TOWARD it, step the caret one char
+                // inside: the strictly-inside position reveals the raw @path for editing.
+                let caret = textView.selectedRange().location
+                switch selector {
+                case #selector(NSResponder.moveLeft(_:)):
+                    if let tok = collapsedToken(endingAt: caret) {
+                        textView.setSelectedRange(NSRange(location: tok.location + tok.length - 1, length: 0))
+                        return true
+                    }
+                case #selector(NSResponder.moveRight(_:)):
+                    if let tok = collapsedToken(startingAt: caret) {
+                        textView.setSelectedRange(NSRange(location: tok.location + 1, length: 0))
+                        return true
+                    }
+                case #selector(NSResponder.moveDown(_:)):
+                    // Let the standard vertical move land first, then — if it dropped the
+                    // caret at a line that LEADS with a bubble — step it to just behind the
+                    // bubble so the caret rests after the preview, not in front of it.
+                    textView.moveDown(nil)
+                    relocateCaretBehindLeadingBubble()
+                    return true
+                default:
+                    break
+                }
+                return false
+            }
             switch selector {
             case #selector(NSResponder.moveUp(_:)):
                 completion.moveUp(); return true
@@ -530,6 +548,28 @@ struct LivePreviewTextView: NSViewRepresentable {
             default:
                 return false
             }
+        }
+
+        /// Collapsed token whose END coincides with `caret` (caret sits just after the bubble).
+        private func collapsedToken(endingAt caret: Int) -> NSRange? {
+            guard let tok = collapsedTokenRange(containing: caret),
+                  tok.location + tok.length == caret else { return nil }
+            return tok
+        }
+
+        /// Collapsed token whose START coincides with `caret` (caret sits just before the bubble).
+        private func collapsedToken(startingAt caret: Int) -> NSRange? {
+            guard let tok = collapsedTokenRange(containing: caret),
+                  tok.location == caret else { return nil }
+            return tok
+        }
+
+        /// If the caret sits exactly at the START of a collapsed bubble, move it to just
+        /// AFTER the bubble. Called after a vertical move so the caret lands behind the
+        /// preview (bubble stays collapsed) rather than in front of it.
+        func relocateCaretBehindLeadingBubble() {
+            guard let tv = textView, let tok = collapsedToken(startingAt: tv.selectedRange().location) else { return }
+            tv.setSelectedRange(NSRange(location: tok.location + tok.length, length: 0))
         }
 
         func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
