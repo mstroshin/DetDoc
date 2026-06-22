@@ -13,10 +13,11 @@ public final class OnboardingViewModel {
     }
 
     @discardableResult
-    public func initialize() -> Bool {
+    public func initialize() async -> Bool {
         error = nil
         do {
             try ConfigStore().initFiles(root: root)
+            try await GitRepository(root).ensureInitialized()
             return true
         } catch let e as DetDocError {
             error = e

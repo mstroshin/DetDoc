@@ -14,9 +14,7 @@ import Testing
     #expect(vm.isDirty == false)
 
     vm.edit("# Edited\n")
-    #expect(vm.isDirty == true)
-    vm.save()
-    #expect(vm.isDirty == false)
+    #expect(vm.isDirty == false)   // autosaved on edit
 
     let onDisk = try String(contentsOf: fx.root.appendingPathComponent("docs/idea.md"), encoding: .utf8)
     #expect(onDisk == "# Edited\n")
@@ -33,16 +31,16 @@ import Testing
 }
 
 @MainActor
-@Test func saveSuccessLeavesErrorNilAndIsDirtyFalse() async throws {
+@Test func editAutosavesLeavingErrorNilAndIsDirtyFalse() async throws {
     let fx = try await VMGitFixture()
     try await fx.detdocInit()
     let vm = DocEditorViewModel(root: fx.root, config: .default)
     vm.open("docs/idea.md")
     vm.edit("updated\n")
-    #expect(vm.isDirty == true)
-    vm.save()
     #expect(vm.isDirty == false)
     #expect(vm.error == nil)
+    let onDisk = try String(contentsOf: fx.root.appendingPathComponent("docs/idea.md"), encoding: .utf8)
+    #expect(onDisk == "updated\n")
 }
 
 @MainActor

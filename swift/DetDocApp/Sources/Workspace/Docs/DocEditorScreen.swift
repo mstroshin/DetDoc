@@ -18,10 +18,6 @@ struct DocEditorScreen: View {
                                    candidatesProvider: candidatesProvider,
                                    onFollowLink: onFollowLink)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .toolbar {
-                        ToolbarItem(placement: .principal) { Text(editor.selectedPath ?? "").font(.headline) }
-                        ToolbarItem { Button("Save") { editor.save() }.disabled(!editor.isDirty) }
-                    }
             }
         }
     }

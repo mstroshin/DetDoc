@@ -31,6 +31,11 @@ let project = Project(
                 "CURRENT_PROJECT_VERSION": "1",
                 "CODE_SIGNING_ALLOWED": "NO",
                 "SWIFT_VERSION": "6.0",
+                // Approachable Concurrency + default MainActor isolation. Kept on the
+                // app target only — the test target stays plain Swift 6 (nonisolated
+                // default), which is why pure-logic types carry explicit `nonisolated`.
+                "SWIFT_APPROACHABLE_CONCURRENCY": "YES",
+                "SWIFT_DEFAULT_ACTOR_ISOLATION": "MainActor",
             ])
         ),
         .target(

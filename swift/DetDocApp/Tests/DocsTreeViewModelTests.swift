@@ -25,6 +25,17 @@ private func makeVM() async throws -> (VMGitFixture, DocsTreeViewModel) {
 }
 
 @MainActor
+@Test func watcherRefreshesTreeOnExternalChange() async throws {
+    let (fx, vm) = try await makeVM()
+    #expect(!vm.nodes.contains { $0.name == "external.md" })
+    // Write directly to disk, bypassing the VM — as if created from Finder/terminal.
+    try fx.write("docs/external.md", "# external\n")
+    await poll { await MainActor.run { vm.nodes.contains { $0.name == "external.md" } } }
+    #expect(vm.nodes.contains { $0.name == "external.md" })
+    withExtendedLifetime(fx) {}
+}
+
+@MainActor
 @Test func newFileCreatesMarkdownAndAppearsInTree() async throws {
     let (fx, vm) = try await makeVM()
     let path = vm.newFile(name: "notes", in: "docs")

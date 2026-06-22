@@ -32,6 +32,22 @@ public struct GitRepository: Sendable {
         try await git(["rev-parse", "HEAD"]).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// Ensure `cwd` is a git repo with at least one commit, so HEAD-based
+    /// operations (worktrees, diffs, applies) work. No-op if `.git` already exists.
+    public func ensureInitialized() async throws {
+        if FileManager.default.fileExists(atPath: cwd.appendingPathComponent(".git").path) { return }
+        _ = try await git(["init", "-q", "-b", "main"])
+        // Set a local identity only when none resolves, so the initial commit
+        // succeeds even on machines with no global git config.
+        let email = (try? await git(["config", "user.email"]))?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if email?.isEmpty ?? true {
+            _ = try await git(["config", "user.email", "detdoc@localhost"])
+            _ = try await git(["config", "user.name", "DetDoc"])
+        }
+        _ = try await git(["add", "-A", "--", "."])
+        _ = try await git(["commit", "-q", "-m", "detdoc init"])
+    }
+
     public func statusPorcelain() async throws -> [GitStatusEntry] {
         let output = try await git(["status", "--porcelain", "-uall"])
         return output.split(separator: "\n", omittingEmptySubsequences: true).compactMap { line in

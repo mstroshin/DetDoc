@@ -36,17 +36,17 @@ final class ImageDropTextView: NSTextView {
     // QLPreviewPanel follows the responder chain: this text view declares itself the
     // controller so the panel adopts the coordinator's data source. Direct dataSource
     // assignment is fragile — the panel re-queries the responder chain on key changes.
-    override func acceptsPreviewPanelControl(_ panel: QLPreviewPanel!) -> Bool {
+    nonisolated override func acceptsPreviewPanelControl(_ panel: QLPreviewPanel!) -> Bool {
         // The panel only drives these on the main thread; the protocol methods are
         // nonisolated in the SDK, so reach main-actor state via assumeIsolated.
         MainActor.assumeIsolated { coordinator?.quickLook.url != nil }
     }
 
-    override func beginPreviewPanelControl(_ panel: QLPreviewPanel!) {
+    nonisolated override func beginPreviewPanelControl(_ panel: QLPreviewPanel!) {
         MainActor.assumeIsolated { panel.dataSource = coordinator?.quickLook }
     }
 
-    override func endPreviewPanelControl(_ panel: QLPreviewPanel!) {
+    nonisolated override func endPreviewPanelControl(_ panel: QLPreviewPanel!) {
         // Plain, reused data source — nothing to tear down.
     }
 }

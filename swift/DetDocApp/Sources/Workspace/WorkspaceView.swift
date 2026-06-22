@@ -84,6 +84,15 @@ struct WorkspaceView: View {
             if let new, !tree.isDirectory(new) { editor.open(new) }
             else if new == nil { editor.clear() }
         }
+        .onChange(of: tree.nodes) { _, _ in
+            // The tree just rebuilt (watcher fired). If the open document's file was
+            // deleted/renamed outside DetDoc, close it — clearing selection cascades
+            // to editor.clear() above.
+            if let open = selectedDoc,
+               !FileManager.default.fileExists(atPath: root.appendingPathComponent(open).path) {
+                selectedDoc = nil
+            }
+        }
         .onChange(of: panel.stage) { _, stage in if stage == .completed { Task { await workspace.refresh(); tree.refresh(); runs.refresh() } } }
         .sheet(isPresented: $showRuns) { RunsSheet(runs: runs).frame(minWidth: 480, minHeight: 360) }
         .sheet(isPresented: $showSettings) { SettingsSheet(settings: settings).frame(minWidth: 520, minHeight: 420) }

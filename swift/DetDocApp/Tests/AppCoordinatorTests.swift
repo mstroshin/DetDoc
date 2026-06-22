@@ -40,3 +40,29 @@ private struct StubPicker: FolderPicking {
     await coordinator.chooseProject()
     #expect(coordinator.route == .noProject)
 }
+
+@MainActor
+@Test func restoreLastProjectReopensRememberedFolder() async throws {
+    let fx = try await VMGitFixture()
+    try await fx.detdocInit()
+    let defaults = UserDefaults(suiteName: "detdoc.test.\(UUID().uuidString)")!
+
+    // First coordinator opens the project (which persists it)...
+    AppCoordinator(picker: StubPicker(url: nil), defaults: defaults).open(root: fx.root)
+    // ...a fresh launch restores it.
+    let next = AppCoordinator(picker: StubPicker(url: nil), defaults: defaults)
+    next.restoreLastProject()
+    guard case .workspace(let restored) = next.route else {
+        Issue.record("expected workspace route, got \(next.route)"); return
+    }
+    #expect(restored.path == fx.root.path)
+}
+
+@MainActor
+@Test func restoreLastProjectIgnoresDeletedFolder() async {
+    let defaults = UserDefaults(suiteName: "detdoc.test.\(UUID().uuidString)")!
+    defaults.set("/nonexistent/detdoc-\(UUID().uuidString)", forKey: "detdoc.lastProjectPath")
+    let coordinator = AppCoordinator(picker: StubPicker(url: nil), defaults: defaults)
+    coordinator.restoreLastProject()
+    #expect(coordinator.route == .noProject)
+}

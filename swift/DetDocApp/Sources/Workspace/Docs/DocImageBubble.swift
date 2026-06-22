@@ -24,7 +24,7 @@ struct DocImageView: View {
 // `url` and `editor` (a @MainActor-isolated, hence Sendable, type) cross freely;
 // `onOpen` is a non-Sendable closure marked nonisolated(unsafe) because it is
 // exclusively invoked on the main thread.
-final class DocImageAttachment: NSTextAttachment {
+nonisolated final class DocImageAttachment: NSTextAttachment {
     let url: URL
     nonisolated(unsafe) let onOpen: () -> Void
     let editor: DocEditorViewModel
@@ -60,9 +60,9 @@ final class DocImageAttachment: NSTextAttachment {
 // loadView()/attachmentBounds(…) are nonisolated in the SDK but always called on the
 // main thread; we bridge non-Sendable values through MainThreadOnly + assumeIsolated,
 // exactly like DocLinkBubble.
-private struct MainThreadOnly<T>: @unchecked Sendable { let value: T }
+nonisolated private struct MainThreadOnly<T>: @unchecked Sendable { let value: T }
 
-final class DocImageProvider: NSTextAttachmentViewProvider {
+nonisolated final class DocImageProvider: NSTextAttachmentViewProvider {
     private let image: NSImage?
     private let onOpen: MainThreadOnly<() -> Void>
     private let editor: MainThreadOnly<DocEditorViewModel?>

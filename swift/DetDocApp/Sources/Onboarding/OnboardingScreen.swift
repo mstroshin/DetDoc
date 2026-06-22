@@ -17,7 +17,7 @@ struct OnboardingScreen: View {
             Text(root.path).font(.caption).monospaced()
         } actions: {
             Button("Initialize DetDoc") {
-                if onboarding.initialize() { coordinator.initialized(root: root) }
+                Task { if await onboarding.initialize() { coordinator.initialized(root: root) } }
             }.buttonStyle(.borderedProminent)
             Button("Choose a different folder…") { Task { await coordinator.chooseProject() } }
             if let error = onboarding.error {

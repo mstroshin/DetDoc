@@ -5,7 +5,7 @@ import DetDocCore
 @MainActor
 @Observable
 public final class RunPanelViewModel {
-    public enum Stage: Sendable, Equatable {
+    nonisolated public enum Stage: Sendable, Equatable {
         case idle, running, planPending, patchPending, completed, failed
     }
 

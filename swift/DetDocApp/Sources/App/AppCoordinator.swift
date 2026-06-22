@@ -17,9 +17,12 @@ public protocol FolderPicking: Sendable {
 public final class AppCoordinator {
     public private(set) var route: AppRoute = .noProject
     private let picker: any FolderPicking
+    private let defaults: UserDefaults
+    private static let lastProjectKey = "detdoc.lastProjectPath"
 
-    public init(picker: any FolderPicking) {
+    public init(picker: any FolderPicking, defaults: UserDefaults = .standard) {
         self.picker = picker
+        self.defaults = defaults
     }
 
     public func chooseProject() async {
@@ -28,12 +31,21 @@ public final class AppCoordinator {
     }
 
     public func open(root: URL) {
+        defaults.set(root.path, forKey: Self.lastProjectKey)
         let configPath = ConfigStore().configPath(root: root)
         if FileManager.default.fileExists(atPath: configPath.path) {
             route = .workspace(root: root)
         } else {
             route = .onboarding(root: root)
         }
+    }
+
+    /// Reopen the last project on launch, if the folder still exists.
+    public func restoreLastProject() {
+        guard case .noProject = route,
+              let path = defaults.string(forKey: Self.lastProjectKey),
+              FileManager.default.fileExists(atPath: path) else { return }
+        open(root: URL(filePath: path))
     }
 
     public func initialized(root: URL) {

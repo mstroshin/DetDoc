@@ -6,11 +6,13 @@ struct RootView: View {
     var body: some View {
         content
             .task {
+                guard case .noProject = coordinator.route else { return }
                 // Dev/automation affordance: open a project directly via env var,
                 // bypassing the folder picker. No effect when unset.
-                if case .noProject = coordinator.route,
-                   let path = ProcessInfo.processInfo.environment["DETDOC_PROJECT"], !path.isEmpty {
+                if let path = ProcessInfo.processInfo.environment["DETDOC_PROJECT"], !path.isEmpty {
                     coordinator.open(root: URL(filePath: path))
+                } else {
+                    coordinator.restoreLastProject()
                 }
             }
     }

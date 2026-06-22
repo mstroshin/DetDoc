@@ -1,8 +1,8 @@
-public enum DiffLineKind: Sendable, Equatable {
+nonisolated public enum DiffLineKind: Sendable, Equatable {
     case header, hunk, addition, deletion, context
 }
 
-public struct DiffLine: Sendable, Equatable {
+nonisolated public struct DiffLine: Sendable, Equatable {
     public let kind: DiffLineKind
     public let text: String
     public init(kind: DiffLineKind, text: String) {
@@ -11,7 +11,7 @@ public struct DiffLine: Sendable, Equatable {
     }
 }
 
-public struct DiffFile: Sendable, Equatable {
+nonisolated public struct DiffFile: Sendable, Equatable {
     public let path: String
     public let lines: [DiffLine]
     public init(path: String, lines: [DiffLine]) {
@@ -20,7 +20,7 @@ public struct DiffFile: Sendable, Equatable {
     }
 }
 
-public enum DiffModel {
+nonisolated public enum DiffModel {
     public static func parse(_ patch: String) -> [DiffFile] {
         var files: [DiffFile] = []
         var currentPath: String?

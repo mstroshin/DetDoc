@@ -9,9 +9,14 @@ public final class DocsTreeViewModel {
     public private(set) var error: DetDocError?
 
     private let docs: DocsService
+    private var watcher: DirectoryWatcher?
 
     public init(root: URL, config: DetDocConfig) {
         self.docs = DocsService(root: root, config: config)
+        // Reflect files created/deleted/renamed outside DetDoc, regardless of focus.
+        watcher = DirectoryWatcher(root.appendingPathComponent("docs")) { [weak self] in
+            self?.refresh()
+        }
     }
 
     public func refresh() {

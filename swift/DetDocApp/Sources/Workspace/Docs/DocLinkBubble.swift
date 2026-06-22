@@ -29,7 +29,7 @@ struct DocLinkBubbleView: View {
 // non-Sendable closure that is exclusively called on the main thread
 // (SwiftUI onTapGesture fires on main). The target docPath is captured inside
 // the onFollow closure at the call site — no need to store it separately here.
-final class DocLinkBubbleAttachment: NSTextAttachment {
+nonisolated final class DocLinkBubbleAttachment: NSTextAttachment {
     let title: String
     nonisolated(unsafe) let onFollow: () -> Void
 
@@ -73,9 +73,9 @@ final class DocLinkBubbleAttachment: NSTextAttachment {
 // @unchecked Sendable wrapper into MainActor.assumeIsolated so the Swift 6
 // region-isolation checker is satisfied.  The wrapper is only ever created and
 // consumed on the main thread, so the @unchecked annotation is safe.
-private struct MainThreadOnly<T>: @unchecked Sendable { let value: T }
+nonisolated private struct MainThreadOnly<T>: @unchecked Sendable { let value: T }
 
-final class DocLinkBubbleProvider: NSTextAttachmentViewProvider {
+nonisolated final class DocLinkBubbleProvider: NSTextAttachmentViewProvider {
     private let bubbleTitle: String
     // Closure type is not Sendable; MainThreadOnly<@unchecked Sendable> bridges it safely
     // because the closure is always created and invoked on the main thread.

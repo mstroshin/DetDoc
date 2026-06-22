@@ -43,6 +43,9 @@ public final class DocEditorViewModel {
     public func edit(_ text: String) {
         source = text
         isDirty = true
+        save()   // autosave; isDirty stays true only if the write fails
+        // ponytail: writes the whole doc on every keystroke — fine for markdown.
+        // Add debouncing if large docs ever lag.
     }
 
     public func save() {
