@@ -9,12 +9,14 @@ struct LivePreviewTextView: NSViewRepresentable {
     var imageImporter: DocImageImporter
     var candidatesProvider: () -> [DocCandidate]
     var onFollowLink: (String) -> Void
+    var showCodeLinks: Bool = false
 
     func makeCoordinator() -> Coordinator {
         Coordinator(editor: editor, resolver: resolver,
                     imageImporter: imageImporter,
                     candidatesProvider: candidatesProvider,
-                    onFollowLink: onFollowLink)
+                    onFollowLink: onFollowLink,
+                    showCodeLinks: showCodeLinks)
     }
 
     func makeNSView(context: Context) -> NSScrollView {
@@ -62,10 +64,13 @@ struct LivePreviewTextView: NSViewRepresentable {
         context.coordinator.imageImporter = imageImporter
         context.coordinator.candidatesProvider = candidatesProvider
         context.coordinator.onFollowLink = onFollowLink
+        let changed = context.coordinator.showCodeLinks != showCodeLinks
+        context.coordinator.showCodeLinks = showCodeLinks
         guard let tv = nsView.documentView as? NSTextView else { return }
         if tv.string != editor.source {           // external change (open/clear)
             tv.string = editor.source
         }
+        if changed { context.coordinator.refreshAllParagraphs() }
     }
 
     @MainActor
@@ -75,6 +80,7 @@ struct LivePreviewTextView: NSViewRepresentable {
         var imageImporter: DocImageImporter
         var candidatesProvider: () -> [DocCandidate]
         var onFollowLink: (String) -> Void
+        var showCodeLinks = false
         weak var textView: NSTextView?
 
         let completion = DocLinkCompletionModel()
@@ -88,12 +94,21 @@ struct LivePreviewTextView: NSViewRepresentable {
         init(editor: DocEditorViewModel, resolver: DocLinkResolver,
              imageImporter: DocImageImporter,
              candidatesProvider: @escaping () -> [DocCandidate],
-             onFollowLink: @escaping (String) -> Void) {
+             onFollowLink: @escaping (String) -> Void,
+             showCodeLinks: Bool = false) {
             self.editor = editor
             self.resolver = resolver
             self.imageImporter = imageImporter
             self.candidatesProvider = candidatesProvider
             self.onFollowLink = onFollowLink
+            self.showCodeLinks = showCodeLinks
+        }
+
+        func refreshAllParagraphs() {
+            guard let storage = textView?.textStorage else { return }
+            storage.beginEditing()
+            storage.edited(.editedAttributes, range: NSRange(location: 0, length: storage.length), changeInLength: 0)
+            storage.endEditing()
         }
 
         // MARK: - NSTextContentStorageDelegate
@@ -105,7 +120,8 @@ struct LivePreviewTextView: NSViewRepresentable {
             let spans = MarkdownStyleScanner.scan(raw.string)
             let refs = DocRefScanner.scan(raw.string)
             let imageRefs = ImageRefScanner.scan(raw.string)
-            if spans.isEmpty && refs.isEmpty && imageRefs.isEmpty { return nil }   // plain paragraph -> default rendering
+            let codeLinkRanges = CodeLinkScanner.scan(raw.string)
+            if spans.isEmpty && refs.isEmpty && imageRefs.isEmpty && codeLinkRanges.isEmpty { return nil }   // plain paragraph -> default rendering
 
             let display = NSMutableAttributedString(attributedString: raw)
             let full = NSRange(location: 0, length: (raw.string as NSString).length)
@@ -188,6 +204,16 @@ struct LivePreviewTextView: NSViewRepresentable {
                     display.addAttribute(.foregroundColor, value: NSColor.systemRed, range: img.range)
                     display.addAttribute(.underlineStyle, value: NSUnderlineStyle.patternDot.rawValue | NSUnderlineStyle.single.rawValue, range: img.range)
                     display.addAttribute(.toolTip, value: "Missing image: \(img.path)", range: img.range)
+                }
+            }
+
+            // --- detdoc:link comments ---
+            for r in codeLinkRanges {
+                if showCodeLinks {
+                    display.addAttribute(.foregroundColor, value: NSColor.tertiaryLabelColor, range: r)
+                    display.addAttribute(.font, value: NSFont.monospacedSystemFont(ofSize: 11, weight: .regular), range: r)
+                } else {
+                    modifications.append((range: r, replacement: nil))   // delete from display
                 }
             }
 
