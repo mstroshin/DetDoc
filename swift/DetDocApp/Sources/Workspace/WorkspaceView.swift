@@ -11,10 +11,12 @@ struct WorkspaceView: View {
     @State private var runs: RunsViewModel
     @State private var settings: SettingsViewModel
     @State private var tree: DocsTreeViewModel
+    @State private var docSearch: DocSearchViewModel
     @State private var selectedDoc: String?
     @State private var showInspector = true
     @State private var showRuns = false
     @State private var showSettings = false
+    @State private var showSearch = false
     @State private var fixMessage = ""
     @State private var showFixPrompt = false
 
@@ -29,6 +31,7 @@ struct WorkspaceView: View {
         _runs = State(initialValue: RunsViewModel(root: root))
         _settings = State(initialValue: SettingsViewModel(root: root))
         _tree = State(initialValue: DocsTreeViewModel(root: root, config: config))
+        _docSearch = State(initialValue: DocSearchViewModel(root: root, config: config))
     }
 
     private var linkResolver: DocLinkResolver {
@@ -67,9 +70,14 @@ struct WorkspaceView: View {
                 Button { showInspector.toggle() } label: { Label("Inspector", systemImage: "sidebar.trailing") }
             }
             ToolbarItem(placement: .status) {
-                Label(workspace.status?.piAvailable == true ? "pi available" : "pi missing",
-                      systemImage: workspace.status?.piAvailable == true ? "checkmark.seal" : "exclamationmark.triangle")
-                    .foregroundStyle(workspace.status?.piAvailable == true ? .green : .orange)
+                Button { showSearch = true } label: {
+                    Label("Search docs", systemImage: "magnifyingglass")
+                        .labelStyle(.titleAndIcon)
+                        .frame(minWidth: 220, alignment: .leading)
+                }
+                .keyboardShortcut("p", modifiers: .command)
+                .help("Search docs (⌘P)")
+                .accessibilityIdentifier("toolbar.searchDocs")
             }
         }
         .task {
@@ -102,5 +110,19 @@ struct WorkspaceView: View {
             Button("Cancel", role: .cancel) { }
         }
         .navigationTitle(root.lastPathComponent)
+        .overlay {
+            if showSearch {
+                DocSearchOverlay(
+                    model: docSearch,
+                    onOpen: { path in
+                        selectedDoc = path
+                        showSearch = false
+                    },
+                    onClose: { showSearch = false }
+                )
+            }
+        }
+        .onChange(of: showSearch) { _, shown in if shown { docSearch.present() } }
+        .animation(.easeOut(duration: 0.12), value: showSearch)
     }
 }
