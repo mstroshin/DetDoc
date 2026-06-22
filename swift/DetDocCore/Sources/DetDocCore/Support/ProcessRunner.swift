@@ -53,6 +53,7 @@ public enum ProcessRunner {
 
                 process.terminationHandler = { proc in
                     group.wait()
+                    DetDocLog.process.debug("exec \(executable, privacy: .public) \(arguments.joined(separator: " "), privacy: .public) → status=\(proc.terminationStatus, privacy: .public)")
                     continuation.resume(returning: ProcessResult(status: proc.terminationStatus, stdout: outBox.value, stderr: errBox.value))
                 }
 

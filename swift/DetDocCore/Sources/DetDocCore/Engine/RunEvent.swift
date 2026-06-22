@@ -35,6 +35,17 @@ public enum RunEvent: Sendable {
     case patchReady(PatchReview)
     case error(DetDocError)
     case complete(RunFlowResult)
+
+    /// One-line, content-free summary for OSLog (counts/codes, never patch/diff bodies).
+    public var logLine: String {
+        switch self {
+        case .progress(let phase, let message): return "phase=\(phase.rawValue) \(message)"
+        case .planReady(let plan): return "planReady changes=\(plan.changes.count) risk=\(plan.risk)"
+        case .patchReady(let review): return "patchReady files=\(review.changedFiles.count) run=\(review.runId)"
+        case .error(let e): return "error=\(e.code) \(e.message)"
+        case .complete(let r): return "complete run=\(r.runId) applied=\(r.applied)"
+        }
+    }
 }
 
 public enum PlanDecision: Sendable { case approve, reject }

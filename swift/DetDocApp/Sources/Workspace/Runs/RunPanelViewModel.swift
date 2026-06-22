@@ -58,6 +58,7 @@ public final class RunPanelViewModel {
     }
 
     public func approvePlan() {
+        DetDocLog.run.notice("user approved plan")
         planReview = nil
         stage = .running
         let engine = engine
@@ -65,11 +66,13 @@ public final class RunPanelViewModel {
     }
 
     public func rejectPlan() {
+        DetDocLog.run.notice("user rejected plan")
         let engine = engine
         Task { await engine?.submitPlanDecision(.reject) }
     }
 
     public func applyPatch() {
+        DetDocLog.run.notice("user applied patch")
         patchReview = nil
         stage = .running
         let engine = engine
@@ -77,11 +80,13 @@ public final class RunPanelViewModel {
     }
 
     public func discardPatch() {
+        DetDocLog.run.notice("user discarded patch")
         let engine = engine
         Task { await engine?.submitApplyDecision(.discard) }
     }
 
     public func cancel() {
+        DetDocLog.run.notice("user cancelled run")
         task?.cancel()
     }
 
@@ -101,9 +106,11 @@ public final class RunPanelViewModel {
             result = r
             stage = .completed
         }
+        DetDocLog.run.info("stage=\(String(describing: self.stage), privacy: .public)")
     }
 
     private func fail(_ e: DetDocError) {
+        DetDocLog.run.error("run failed code=\(e.code, privacy: .public) \(e.message, privacy: .public)")
         error = e
         stage = .failed
     }

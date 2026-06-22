@@ -35,11 +35,14 @@ public final class PiProcessTransport: PiRpcTransport, @unchecked Sendable {
             self.lock.lock(); self.stderrBuffer.append(chunk); self.lock.unlock()
         }
 
+        DetDocLog.process.notice("spawn pi: \(executable, privacy: .public) \(arguments.joined(separator: " "), privacy: .public)")
         do {
             try process.run()
         } catch {
+            DetDocLog.process.error("pi spawn failed: \(error.localizedDescription, privacy: .public)")
             throw DetDocError("PI_RPC_SPAWN_FAILED", "\(executable): \(error)")
         }
+        DetDocLog.process.info("pi running pid=\(process.processIdentifier, privacy: .public)")
     }
 
     public func send(_ line: String) async throws {
@@ -101,7 +104,9 @@ public final class PiProcessTransport: PiRpcTransport, @unchecked Sendable {
             return stderrBuffer
         }
         let signaled = process.terminationReason == .uncaughtSignal
-        var lines = ["pi \(signaled ? "killed by signal" : "exited with status") \(process.terminationStatus)"]
+        let status = process.terminationStatus
+        DetDocLog.process.notice("pi \(signaled ? "killed by signal" : "exited", privacy: .public) status=\(status, privacy: .public)")
+        var lines = ["pi \(signaled ? "killed by signal" : "exited with status") \(status)"]
         if let text = String(data: captured, encoding: .utf8) {
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmed.isEmpty { lines.append("pi stderr: \(String(trimmed.suffix(2000)))") }

@@ -59,20 +59,26 @@ public actor DetDocEngine {
     public func start(mode: RunMode, message: String? = nil) -> AsyncThrowingStream<RunEvent, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
+                DetDocLog.engine.notice("run start mode=\(mode.rawValue, privacy: .public)")
                 do {
                     let result = try await self.runFlow(mode: mode, message: message) { event in
+                        DetDocLog.engine.info("\(event.logLine, privacy: .public)")
                         continuation.yield(event)
                     }
+                    DetDocLog.engine.notice("run finished run=\(result.runId, privacy: .public) applied=\(result.applied, privacy: .public)")
                     continuation.yield(.complete(result))
                     continuation.finish()
                 } catch let error as DetDocError {
+                    DetDocLog.engine.error("run failed code=\(error.code, privacy: .public) \(error.message, privacy: .public)")
                     continuation.yield(.error(error))
                     continuation.finish(throwing: error)
                 } catch is CancellationError {
+                    DetDocLog.engine.notice("run cancelled")
                     let wrapped = DetDocError("ENGINE_CANCELLED", "Run was cancelled.")
                     continuation.yield(.error(wrapped))
                     continuation.finish(throwing: wrapped)
                 } catch {
+                    DetDocLog.engine.error("run failed unexpectedly: \(error.localizedDescription, privacy: .public)")
                     let wrapped = DetDocError("ENGINE_FAILED", "\(error)")
                     continuation.yield(.error(wrapped))
                     continuation.finish(throwing: wrapped)

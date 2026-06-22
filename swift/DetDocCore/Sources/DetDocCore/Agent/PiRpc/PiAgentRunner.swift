@@ -24,6 +24,7 @@ public struct PiAgentRunner: AgentRunner {
     static let implementationTools = ["read", "grep", "find", "ls", "bash", "edit", "write"]
 
     public func plan(_ request: PlanRequest) async throws -> AgentPlanResult {
+        DetDocLog.agent.notice("plan: model=\(request.config.agent.model ?? "default", privacy: .public)")
         let args = Self.spawnArgs(model: request.config.agent.model, tools: Self.planningTools)
         let transport = try makeTransport(executable, args, request.cwd)
         let messages = try await drive(transport,
@@ -49,6 +50,7 @@ public struct PiAgentRunner: AgentRunner {
     private func runImplementation(_ request: ImplementRequest,
                                    prompt: String,
                                    progress: (@Sendable (AgentImplementationProgress) -> Void)?) async throws -> AgentRunResult {
+        DetDocLog.agent.notice("implement: model=\(request.config.agent.model ?? "default", privacy: .public)")
         let args = Self.spawnArgs(model: request.config.agent.model, tools: Self.implementationTools)
         let transport = try makeTransport(executable, args, request.cwd)
         let messages = try await drive(transport, thinking: request.config.agent.thinking, prompt: prompt, progress: progress)
@@ -82,10 +84,12 @@ public struct PiAgentRunner: AgentRunner {
                         throw DetDocError("PI_RPC_COMMAND_FAILED", "pi rejected the prompt: \(error ?? "unknown error")")
                     }
                 case .toolExecutionStart(let toolName, let path, let command):
+                    DetDocLog.agent.info("pi tool=\(toolName, privacy: .public) \(path ?? command ?? "", privacy: .public)")
                     if let progress {
                         Self.emitProgress(toolName: toolName, path: path, command: command, progress: progress)
                     }
                 case .agentEnd(let endMessages):
+                    DetDocLog.agent.notice("pi agent_end messages=\(endMessages.count, privacy: .public)")
                     messages = endMessages
                 case .other:
                     break
@@ -105,6 +109,7 @@ public struct PiAgentRunner: AgentRunner {
                 detail += "last event: \(snippet)"
             }
             let suffix = detail.isEmpty ? "" : "\n\(detail)"
+            DetDocLog.agent.error("pi ended without agent_end. \(detail, privacy: .public)")
             throw DetDocError("PI_RPC_NO_RESULT", "pi ended without an agent_end event\(suffix)")
         }
         return messages

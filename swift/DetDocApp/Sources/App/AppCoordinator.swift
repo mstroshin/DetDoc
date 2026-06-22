@@ -34,8 +34,10 @@ public final class AppCoordinator {
         defaults.set(root.path, forKey: Self.lastProjectKey)
         let configPath = ConfigStore().configPath(root: root)
         if FileManager.default.fileExists(atPath: configPath.path) {
+            DetDocLog.app.notice("open → workspace: \(root.path, privacy: .public)")
             route = .workspace(root: root)
         } else {
+            DetDocLog.app.notice("open → onboarding (no config): \(root.path, privacy: .public)")
             route = .onboarding(root: root)
         }
     }
