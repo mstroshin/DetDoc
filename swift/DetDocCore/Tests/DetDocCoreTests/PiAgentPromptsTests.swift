@@ -21,6 +21,14 @@ private let cwd = URL(fileURLWithPath: "/tmp")
     #expect(prompt.contains("Fix mode MUST NOT target documentation files."))
 }
 
+@Test func planningPromptRequestsRequiredRiskField() {
+    // Regression: ProposedPlan decoding requires a top-level `risk`; the prompt must ask for it,
+    // otherwise pi follows the schema list verbatim and omits risk → PI_PLAN_PARSE_FAILED.
+    let prompt = PiAgentPrompts.planningPrompt(PlanRequest(mode: .run, input: "x", config: .default, cwd: cwd))
+    #expect(prompt.contains("risk: required top-level string"))
+    #expect(prompt.contains("low, medium, high"))
+}
+
 @Test func planningPromptEmbedsDeniedPaths() {
     let prompt = PiAgentPrompts.planningPrompt(PlanRequest(mode: .run, input: "x", config: .default, cwd: cwd))
     #expect(prompt.contains("\".env\""))  // paths.deny default includes ".env"

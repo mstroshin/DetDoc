@@ -28,6 +28,7 @@ public enum PiAgentPrompts {
             "Do not wrap the JSON in prose or Markdown code fences; do not call any tool to submit it.",
             "Plan schema constraints:",
             "- summary: short string.",
+            "- risk: required top-level string, exactly one of: low, medium, high.",
             "- changes: non-empty array.",
             "- changes[].targetFiles: exact repository-relative paths that implementation may edit/create/delete.",
             "- changes[].kind: one of create, modify, delete, rename.",
