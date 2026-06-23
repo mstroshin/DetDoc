@@ -5,12 +5,18 @@ public actor DetDocEngine {
     private let agent: any AgentRunner
     private let maxRepairAttempts = 2
 
+    private var pendingInput: CheckedContinuation<InputDecision, Error>?
     private var pendingPlan: CheckedContinuation<PlanDecision, Error>?
     private var pendingApply: CheckedContinuation<ApplyDecision, Error>?
 
     public init(root: URL, agent: any AgentRunner) {
         self.root = root
         self.agent = agent
+    }
+
+    public func submitInputDecision(_ decision: InputDecision) {
+        pendingInput?.resume(returning: decision)
+        pendingInput = nil
     }
 
     public func submitPlanDecision(_ decision: PlanDecision) {
@@ -21,6 +27,21 @@ public actor DetDocEngine {
     public func submitApplyDecision(_ decision: ApplyDecision) {
         pendingApply?.resume(returning: decision)
         pendingApply = nil
+    }
+
+    private func awaitInputDecision() async throws -> InputDecision {
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (c: CheckedContinuation<InputDecision, Error>) in
+                self.pendingInput = c
+            }
+        } onCancel: {
+            Task { await self.failPendingInput() }
+        }
+    }
+
+    private func failPendingInput() {
+        pendingInput?.resume(throwing: CancellationError())
+        pendingInput = nil
     }
 
     /// Suspends at the plan-approval gate until a decision is submitted, or fails with
@@ -111,6 +132,14 @@ public actor DetDocEngine {
                 throw DetDocError("EMPTY_FIX_MESSAGE", "detdoc fix requires a non-empty message.")
             }
             taskInput = msg
+        }
+
+        if mode == .run {
+            emit(.progress(phase: .reviewInput, message: "Waiting for diff review"))
+            emit(.inputReady(taskInput))
+            if try await awaitInputDecision() == .cancel {
+                throw DetDocError("RUN_CANCELLED_BY_USER", "Run cancelled before start.")
+            }
         }
 
         emit(.progress(phase: .createRun, message: "Creating run artifacts"))

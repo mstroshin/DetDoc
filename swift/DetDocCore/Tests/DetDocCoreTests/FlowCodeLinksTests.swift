@@ -16,6 +16,7 @@ import Testing
     var applied = false
     for try await event in stream {
         switch event {
+        case .inputReady: await engine.submitInputDecision(.confirm)
         case .planReady: await engine.submitPlanDecision(.approve)
         case .patchReady: await engine.submitApplyDecision(.apply)
         case .complete(let r): applied = r.applied
@@ -45,6 +46,7 @@ import Testing
     let stream1 = await engine1.start(mode: .run, message: nil)
     for try await event in stream1 {
         switch event {
+        case .inputReady: await engine1.submitInputDecision(.confirm)
         case .planReady: await engine1.submitPlanDecision(.approve)
         case .patchReady: await engine1.submitApplyDecision(.apply)
         default: break
@@ -65,6 +67,7 @@ import Testing
     var applied2 = false
     for try await event in stream2 {
         switch event {
+        case .inputReady: await engine2.submitInputDecision(.confirm)
         case .planReady: await engine2.submitPlanDecision(.approve)
         case .patchReady: await engine2.submitApplyDecision(.apply)
         case .complete(let r): applied2 = r.applied
@@ -99,6 +102,7 @@ import Testing
     let stream = await engine.start(mode: .run, message: nil)
     for try await event in stream {
         switch event {
+        case .inputReady: await engine.submitInputDecision(.confirm)
         case .planReady: await engine.submitPlanDecision(.approve)
         case .patchReady: await engine.submitApplyDecision(.apply)
         default: break

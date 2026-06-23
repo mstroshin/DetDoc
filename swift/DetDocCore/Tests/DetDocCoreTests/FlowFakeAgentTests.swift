@@ -9,6 +9,7 @@ private func drive(_ engine: DetDocEngine, mode: RunMode, message: String? = nil
     var result: RunFlowResult?
     for try await event in stream {
         switch event {
+        case .inputReady: await engine.submitInputDecision(.confirm)
         case .planReady: await engine.submitPlanDecision(plan)
         case .patchReady: await engine.submitApplyDecision(apply)
         case .complete(let r): result = r
@@ -140,6 +141,8 @@ private struct RepairingAgent: AgentRunner {
     let consumer = Task {
         let stream = await engine.start(mode: .run)
         for try await event in stream {
+            // Confirm the input gate so the flow advances to the plan gate.
+            if case .inputReady = event { await engine.submitInputDecision(.confirm) }
             // Signal the gate but keep iterating (never submit a decision) so the flow Task
             // stays suspended at the gate and the stream stays alive until we cancel below.
             if case .planReady = event { reachedGate.continuation.yield(()) }

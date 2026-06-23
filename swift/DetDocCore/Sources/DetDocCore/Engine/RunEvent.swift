@@ -1,6 +1,7 @@
 public enum RunPhase: String, Sendable {
     case loadConfig = "load_config"
     case collectInput = "collect_input"
+    case reviewInput = "review_input"
     case createRun = "create_run"
     case createWorktree = "create_worktree"
     case applyInputToWorktree = "apply_input_to_worktree"
@@ -31,6 +32,7 @@ public struct PatchReview: Sendable {
 
 public enum RunEvent: Sendable {
     case progress(phase: RunPhase, message: String)
+    case inputReady(String)
     case planReady(ProposedPlan)
     case patchReady(PatchReview)
     case error(DetDocError)
@@ -40,6 +42,7 @@ public enum RunEvent: Sendable {
     public var logLine: String {
         switch self {
         case .progress(let phase, let message): return "phase=\(phase.rawValue) \(message)"
+        case .inputReady(let diff): return "inputReady bytes=\(diff.utf8.count)"
         case .planReady(let plan): return "planReady changes=\(plan.changes.count) risk=\(plan.risk)"
         case .patchReady(let review): return "patchReady files=\(review.changedFiles.count) run=\(review.runId)"
         case .error(let e): return "error=\(e.code) \(e.message)"
@@ -50,3 +53,4 @@ public enum RunEvent: Sendable {
 
 public enum PlanDecision: Sendable { case approve, reject }
 public enum ApplyDecision: Sendable { case apply, discard }
+public enum InputDecision: Sendable { case confirm, cancel }
