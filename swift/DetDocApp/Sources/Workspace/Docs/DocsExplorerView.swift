@@ -5,6 +5,8 @@ struct DocsExplorerView: View {
     let tree: DocsTreeViewModel
     @Binding var selection: String?
     var dirtyPath: String?
+    /// Double click on a file row — open its text (the caller leaves the canvas if shown).
+    var onActivate: (String) -> Void = { _ in }
 
     @State private var showNewFile = false
     @State private var showNewFolder = false
@@ -26,6 +28,11 @@ struct DocsExplorerView: View {
                 Button("Rename…") { nameInput = node.name; renameTarget = node.id }
                 Button("Delete…", role: .destructive) { deleteTarget = node.id }
             }
+            // Single click selects (List selection); double click on a file opens its text.
+            // simultaneousGesture preserves the row's default selection / folder expansion.
+            .simultaneousGesture(TapGesture(count: 2).onEnded {
+                if !node.isDirectory { selection = node.id; onActivate(node.id) }
+            })
         }
         .overlay {
             if tree.nodes.isEmpty {

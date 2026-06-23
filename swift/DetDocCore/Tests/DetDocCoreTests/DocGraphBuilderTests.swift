@@ -22,8 +22,9 @@ private func write(_ tmp: TempDir, _ rel: String, _ text: String) throws {
     // Images: docs-relative, de-duplicated, only on the owning node.
     #expect(graph.nodes.first?.imagePaths == ["assets/x.png"])
     #expect(graph.nodes.last?.imagePaths == [])
-    // Edges: a<->b once (undirected, de-duplicated), dangling @nope excluded.
-    #expect(graph.edges == [DocGraphEdge("a.md", "b.md")])
+    // Edges: directed — a links @b and b links @a, so both directions appear
+    // (sorted by source then target); dangling @nope excluded.
+    #expect(graph.edges == [DocGraphEdge("a.md", "b.md"), DocGraphEdge("b.md", "a.md")])
 }
 
 @Test func dropsSelfLinks() throws {

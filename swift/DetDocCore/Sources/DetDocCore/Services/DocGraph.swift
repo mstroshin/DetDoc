@@ -6,12 +6,13 @@ public struct DocGraphPoint: Codable, Equatable, Sendable {
     public init(x: Double, y: Double) { self.x = x; self.y = y }
 }
 
-/// Undirected, de-duplicating edge: `init` normalises the endpoints so A↔B == B↔A.
+/// Directed link edge: `a` (the source doc) points at `b` (the dependency it links to).
+/// Direction is kept — A→B and B→A are two distinct edges; exact duplicates dedupe.
 public struct DocGraphEdge: Hashable, Sendable, Comparable {
-    public let a: String
-    public let b: String
-    public init(_ x: String, _ y: String) {
-        if x <= y { a = x; b = y } else { a = y; b = x }
+    public let a: String   // source: the doc that contains the link
+    public let b: String   // target: the linked dependency the arrow points at
+    public init(_ a: String, _ b: String) {
+        self.a = a; self.b = b
     }
     public static func < (l: DocGraphEdge, r: DocGraphEdge) -> Bool {
         l.a == r.a ? l.b < r.b : l.a < r.a

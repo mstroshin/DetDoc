@@ -47,15 +47,18 @@ struct WorkspaceView: View {
     var body: some View {
         NavigationSplitView {
             DocsExplorerView(tree: tree, selection: $selectedDoc,
-                             dirtyPath: editor.isDirty ? editor.selectedPath : nil)
+                             dirtyPath: editor.isDirty ? editor.selectedPath : nil,
+                             onActivate: { _ in showCanvas = false })
                 .navigationSplitViewColumnWidth(min: 220, ideal: 280, max: 360)
                 .navigationTitle("Docs")
         } detail: {
             if showCanvas {
-                DocGraphView(model: graph, root: root, onOpenDoc: { docPath in
-                    selectedDoc = "docs/" + docPath
-                    showCanvas = false
-                })
+                DocGraphView(model: graph, root: root, selectedDoc: selectedDoc,
+                             onSelectDoc: { docPath in selectedDoc = "docs/" + docPath },
+                             onOpenDoc: { docPath in
+                                 selectedDoc = "docs/" + docPath
+                                 showCanvas = false
+                             })
             } else {
                 DocEditorScreen(editor: editor, resolver: linkResolver,
                                 imageImporter: imageImporter,
@@ -76,10 +79,11 @@ struct WorkspaceView: View {
                 Button { panel.start(mode: .run) } label: { Label("Run docs", systemImage: "play.fill") }
                 Button { showFixPrompt = true } label: { Label("Fix…", systemImage: "wrench.and.screwdriver") }
                 Button { showCanvas.toggle() } label: {
-                    Label("Canvas", systemImage: showCanvas ? "doc.text" : "point.3.connected.trianglepath.dotted")
+                    Label(showCanvas ? "Text" : "Canvas",
+                          systemImage: showCanvas ? "doc.text" : "point.3.connected.trianglepath.dotted")
                 }
                 .accessibilityIdentifier("toolbar.toggleCanvas")
-                .accessibilityLabel(showCanvas ? "Show editor" : "Show canvas")
+                .accessibilityLabel(showCanvas ? "Show text" : "Show canvas")
                 Button { showRuns = true } label: { Label("Runs", systemImage: "clock.arrow.circlepath") }
                 Button { showSettings = true } label: { Label("Settings", systemImage: "gearshape") }
                 Button { showInspector.toggle() } label: { Label("Inspector", systemImage: "sidebar.trailing") }
