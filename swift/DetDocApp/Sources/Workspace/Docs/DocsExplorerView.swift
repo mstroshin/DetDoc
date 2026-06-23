@@ -16,7 +16,7 @@ struct DocsExplorerView: View {
 
     var body: some View {
         List(tree.nodes, children: \.children, selection: $selection) { node in
-            HStack(spacing: 6) {
+            let row = HStack(spacing: 6) {
                 Label(node.name, systemImage: node.isDirectory ? "folder" : "doc.text")
                 if !node.isDirectory, node.id == dirtyPath {
                     Spacer()
@@ -28,11 +28,18 @@ struct DocsExplorerView: View {
                 Button("Rename…") { nameInput = node.name; renameTarget = node.id }
                 Button("Delete…", role: .destructive) { deleteTarget = node.id }
             }
-            // Single click selects (List selection); double click on a file opens its text.
-            // simultaneousGesture preserves the row's default selection / folder expansion.
-            .simultaneousGesture(TapGesture(count: 2).onEnded {
-                if !node.isDirectory { selection = node.id; onActivate(node.id) }
-            })
+
+            if node.isDirectory {
+                row   // folders keep the List's native selection + disclosure behaviour
+            } else {
+                // Make the whole row (the label included) the hit area: single click
+                // selects, double click opens the text. A gesture on the label alone
+                // would steal clicks on the text from the List's own selection — which is
+                // why clicking the file name used to do nothing.
+                row.contentShape(Rectangle())
+                    .onTapGesture(count: 2) { selection = node.id; onActivate(node.id) }
+                    .onTapGesture(count: 1) { selection = node.id }
+            }
         }
         .overlay {
             if tree.nodes.isEmpty {
