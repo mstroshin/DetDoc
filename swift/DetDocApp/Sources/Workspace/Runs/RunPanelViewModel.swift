@@ -6,10 +6,11 @@ import DetDocCore
 @Observable
 public final class RunPanelViewModel {
     nonisolated public enum Stage: Sendable, Equatable {
-        case idle, running, planPending, patchPending, completed, failed
+        case idle, running, inputPending, planPending, patchPending, completed, failed
     }
 
     public private(set) var stage: Stage = .idle
+    public private(set) var inputDiff: String?
     public private(set) var currentPhase: RunPhase?
     public private(set) var planReview: ProposedPlan?
     public private(set) var patchReview: PatchReviewViewModel?
@@ -57,6 +58,20 @@ public final class RunPanelViewModel {
         }
     }
 
+    public func confirmInput() {
+        DetDocLog.run.notice("user confirmed input diff")
+        inputDiff = nil
+        stage = .running
+        let engine = engine
+        Task { await engine?.submitInputDecision(.confirm) }
+    }
+
+    public func cancelInput() {
+        DetDocLog.run.notice("user cancelled input diff")
+        let engine = engine
+        Task { await engine?.submitInputDecision(.cancel) }
+    }
+
     public func approvePlan() {
         DetDocLog.run.notice("user approved plan")
         planReview = nil
@@ -94,6 +109,9 @@ public final class RunPanelViewModel {
         switch event {
         case .progress(let phase, _):
             currentPhase = phase
+        case .inputReady(let diff):
+            inputDiff = diff
+            stage = .inputPending
         case .planReady(let plan):
             planReview = plan
             stage = .planPending
@@ -110,12 +128,20 @@ public final class RunPanelViewModel {
     }
 
     private func fail(_ e: DetDocError) {
+        if e.code == "RUN_CANCELLED_BY_USER" {
+            DetDocLog.run.notice("run cancelled at input gate")
+            inputDiff = nil
+            error = nil
+            stage = .idle
+            return
+        }
         DetDocLog.run.error("run failed code=\(e.code, privacy: .public) \(e.message, privacy: .public)")
         error = e
         stage = .failed
     }
 
     private func reset() {
+        inputDiff = nil
         currentPhase = nil
         planReview = nil
         patchReview = nil

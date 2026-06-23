@@ -35,6 +35,10 @@ struct RunInspectorView: View {
             ContentUnavailableView("Ready", systemImage: "play.circle", description: Text("Run docs or start a fix to begin."))
         case .running:
             ProgressView().controlSize(.small)
+        case .inputPending:
+            Label("Review the diff in the dialog to start the run.", systemImage: "doc.text.magnifyingglass")
+                .font(.caption).foregroundStyle(.secondary)
+                .accessibilityIdentifier("inspector-input-pending")
         case .planPending:
             if let plan = panel.planReview {
                 PlanReviewView(plan: plan, onApprove: { panel.approvePlan() }, onReject: { panel.rejectPlan() })
