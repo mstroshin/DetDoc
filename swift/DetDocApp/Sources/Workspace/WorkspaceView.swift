@@ -147,6 +147,10 @@ struct WorkspaceView: View {
         .sheet(isPresented: $showSettings) { SettingsSheet(settings: settings).frame(minWidth: 520, minHeight: 420) }
         .sheet(isPresented: Binding(
             get: { panel.stage == .inputPending },
+            // Treat system dismissal (Esc / click-away) as cancel. On the Cancel-button path this can
+            // fire cancelInput() a second time (stage is still .inputPending until the engine's error
+            // round-trips), which is harmless: the engine's submitInputDecision finds no pending
+            // continuation and no-ops. Do not "fix" this by making cancelInput() set stage synchronously.
             set: { presented in
                 if !presented && panel.stage == .inputPending { panel.cancelInput() }
             }

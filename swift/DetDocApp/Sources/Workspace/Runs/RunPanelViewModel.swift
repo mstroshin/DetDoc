@@ -66,6 +66,10 @@ public final class RunPanelViewModel {
         Task { await engine?.submitInputDecision(.confirm) }
     }
 
+    /// Deliberately does NOT move `stage` synchronously (unlike `confirmInput`). The stage only
+    /// reaches `.idle` once the engine's `RUN_CANCELLED_BY_USER` error round-trips back through the
+    /// stream into `fail`. Setting `.idle` here would pass `start()`'s guard immediately, letting the
+    /// user launch a fresh run that the old task's late error could then clobber back to `.idle`.
     public func cancelInput() {
         DetDocLog.run.notice("user cancelled input diff")
         let engine = engine
