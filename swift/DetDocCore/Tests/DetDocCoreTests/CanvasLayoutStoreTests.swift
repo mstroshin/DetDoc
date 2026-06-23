@@ -17,3 +17,12 @@ import Testing
 @Test func gitignoreCoversLayoutFile() {
     #expect(GitignoreManager.managedEntries.contains(".detdoc/canvas-layout.json"))
 }
+
+@Test func loadCorruptFileReturnsEmpty() throws {
+    let tmp = TempDir()
+    let store = CanvasLayoutStore(root: tmp.url)
+    let dir = tmp.url.appendingPathComponent(".detdoc")
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    try Data("not json".utf8).write(to: dir.appendingPathComponent("canvas-layout.json"))
+    #expect(store.load().isEmpty)
+}
