@@ -21,6 +21,7 @@ struct WorkspaceView: View {
     @State private var showFixPrompt = false
     @State private var graph: DocGraphViewModel
     @State private var showCanvas = false
+    @AppStorage("showCodeLinks") private var showCodeLinks = false
 
     init(root: URL) {
         self.root = root
@@ -44,6 +45,29 @@ struct WorkspaceView: View {
 
     private var imageImporter: DocImageImporter { DocImageImporter(root: root) }
 
+    /// Header bar for the central detail block: the code-links switch (editor only) next to
+    /// the Canvas/Text toggle, which is reachable in every state including the canvas itself.
+    private var centralHeader: some View {
+        HStack(spacing: 12) {
+            Spacer()
+            if !showCanvas, editor.selectedPath != nil {
+                Toggle("Show code links", isOn: $showCodeLinks)
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .accessibilityIdentifier("toggle-show-code-links")
+            }
+            Button { showCanvas.toggle() } label: {
+                Label(showCanvas ? "Text" : "Canvas",
+                      systemImage: showCanvas ? "doc.text" : "point.3.connected.trianglepath.dotted")
+            }
+            .controlSize(.small)
+            .help(showCanvas ? "Show document text" : "Show canvas")
+            .accessibilityIdentifier("toggle-canvas")
+            .accessibilityLabel(showCanvas ? "Show text" : "Show canvas")
+        }
+        .padding(.horizontal, 12).padding(.vertical, 6)
+    }
+
     var body: some View {
         NavigationSplitView {
             DocsExplorerView(tree: tree, selection: $selectedDoc,
@@ -52,21 +76,25 @@ struct WorkspaceView: View {
                 .navigationSplitViewColumnWidth(min: 220, ideal: 280, max: 360)
                 .navigationTitle("Docs")
         } detail: {
-            if showCanvas {
-                DocGraphView(model: graph, root: root, selectedDoc: selectedDoc,
-                             onSelectDoc: { docPath in selectedDoc = "docs/" + docPath },
-                             onOpenDoc: { docPath in
-                                 selectedDoc = "docs/" + docPath
-                                 showCanvas = false
-                             })
-            } else {
-                DocEditorScreen(editor: editor, resolver: linkResolver,
-                                imageImporter: imageImporter,
-                                candidatesProvider: {
-                                    let svc = DocsService(root: root, config: self.config)
-                                    return svc.candidates()
-                                }) { docPath in
-                    if !tree.isDirectory(docPath) { selectedDoc = docPath }
+            VStack(spacing: 0) {
+                centralHeader
+                Divider()
+                if showCanvas {
+                    DocGraphView(model: graph, root: root, selectedDoc: selectedDoc,
+                                 onSelectDoc: { docPath in selectedDoc = "docs/" + docPath },
+                                 onOpenDoc: { docPath in
+                                     selectedDoc = "docs/" + docPath
+                                     showCanvas = false
+                                 })
+                } else {
+                    DocEditorScreen(editor: editor, resolver: linkResolver,
+                                    imageImporter: imageImporter, showCodeLinks: showCodeLinks,
+                                    candidatesProvider: {
+                                        let svc = DocsService(root: root, config: self.config)
+                                        return svc.candidates()
+                                    }) { docPath in
+                        if !tree.isDirectory(docPath) { selectedDoc = docPath }
+                    }
                 }
             }
         }
@@ -78,12 +106,6 @@ struct WorkspaceView: View {
             ToolbarItemGroup {
                 Button { panel.start(mode: .run) } label: { Label("Run docs", systemImage: "play.fill") }
                 Button { showFixPrompt = true } label: { Label("Fix…", systemImage: "wrench.and.screwdriver") }
-                Button { showCanvas.toggle() } label: {
-                    Label(showCanvas ? "Text" : "Canvas",
-                          systemImage: showCanvas ? "doc.text" : "point.3.connected.trianglepath.dotted")
-                }
-                .accessibilityIdentifier("toolbar.toggleCanvas")
-                .accessibilityLabel(showCanvas ? "Show text" : "Show canvas")
                 Button { showRuns = true } label: { Label("Runs", systemImage: "clock.arrow.circlepath") }
                 Button { showSettings = true } label: { Label("Settings", systemImage: "gearshape") }
                 Button { showInspector.toggle() } label: { Label("Inspector", systemImage: "sidebar.trailing") }
