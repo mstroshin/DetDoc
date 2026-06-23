@@ -2,9 +2,16 @@ import Foundation
 
 /// Deterministic Fruchterman–Reingold layout. No RNG: nodes seed on a circle by index,
 /// coincident points are separated by a fixed deterministic nudge. Same input → same output.
+///
+/// `groups` (nodeID → group key, e.g. parent folder) adds a soft attraction between members
+/// of the same group so they cluster together. Empty `groups` → pure link layout.
 public enum ForceLayout {
+    /// Folder cohesion is a bit softer than a real link so explicit links still dominate.
+    private static let groupCohesion = 0.6
+
     public static func compute(nodeIDs: [String],
                                edges: [DocGraphEdge],
+                               groups: [String: String] = [:],
                                iterations: Int = 300) -> [String: DocGraphPoint] {
         let n = nodeIDs.count
         if n == 0 { return [:] }
@@ -18,6 +25,18 @@ public enum ForceLayout {
         for (i, id) in nodeIDs.enumerated() {
             let angle = 2 * .pi * Double(i) / Double(n)
             pos[id] = (radius * Foundation.cos(angle), radius * Foundation.sin(angle))
+        }
+
+        // Same-group pairs get a soft attraction so folders cluster. O(n²) build, fine for
+        // doc-sized graphs.
+        var groupPairs: [(String, String)] = []
+        if !groups.isEmpty {
+            for i in 0..<n {
+                for j in (i + 1)..<n {
+                    let a = nodeIDs[i], b = nodeIDs[j]
+                    if let ga = groups[a], let gb = groups[b], ga == gb { groupPairs.append((a, b)) }
+                }
+            }
         }
 
         var temp = k * 2                                  // max displacement, cooled each pass
@@ -47,6 +66,16 @@ public enum ForceLayout {
                 let force = d * d / k
                 disp[e.a]!.x -= dx / d * force; disp[e.a]!.y -= dy / d * force
                 disp[e.b]!.x += dx / d * force; disp[e.b]!.y += dy / d * force
+            }
+            // Same-folder cohesion: a softer attraction between co-located docs.
+            for (a, b) in groupPairs {
+                guard let pa = pos[a], let pb = pos[b] else { continue }
+                let dx = pa.x - pb.x, dy = pa.y - pb.y
+                var d = (dx * dx + dy * dy).squareRoot()
+                if d < 0.01 { d = 0.01 }
+                let force = d * d / k * groupCohesion
+                disp[a]!.x -= dx / d * force; disp[a]!.y -= dy / d * force
+                disp[b]!.x += dx / d * force; disp[b]!.y += dy / d * force
             }
             // Apply, capped by current temperature.
             for id in nodeIDs {

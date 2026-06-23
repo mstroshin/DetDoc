@@ -29,3 +29,16 @@ private func dist(_ a: DocGraphPoint, _ b: DocGraphPoint) -> Double {
     #expect(ForceLayout.compute(nodeIDs: [], edges: []).isEmpty)
     #expect(ForceLayout.compute(nodeIDs: ["solo"], edges: []) == ["solo": DocGraphPoint(x: 0, y: 0)])
 }
+
+@Test func sameGroupNodesClusterCloserThanCrossGroup() {
+    // No links at all — only folder grouping should pull same-folder docs together.
+    let ids = ["a", "b", "c", "d"]
+    let groups = ["a": "G1", "b": "G1", "c": "G2", "d": "G2"]
+    let p = ForceLayout.compute(nodeIDs: ids, edges: [], groups: groups)
+
+    let within = (dist(p["a"]!, p["b"]!) + dist(p["c"]!, p["d"]!)) / 2
+    let crossPairs = [dist(p["a"]!, p["c"]!), dist(p["a"]!, p["d"]!),
+                      dist(p["b"]!, p["c"]!), dist(p["b"]!, p["d"]!)]
+    let cross = crossPairs.reduce(0, +) / Double(crossPairs.count)
+    #expect(within < cross)
+}

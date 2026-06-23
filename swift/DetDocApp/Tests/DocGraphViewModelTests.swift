@@ -48,6 +48,25 @@ import Testing
 }
 
 @MainActor
+@Test func persistsOnlyMovedNodes() async throws {
+    let fx = try await VMGitFixture()
+    try await fx.detdocInit()
+    try fx.write("docs/a.md", "# A\n")
+    try fx.write("docs/b.md", "# B\n")
+
+    let vm = DocGraphViewModel(root: fx.root, config: .default)
+    vm.refresh()
+    vm.moveNode("a.md", to: CGPoint(x: 5, y: 6))
+    vm.persistPositions()
+
+    // Only the moved node is saved; un-moved nodes keep following the auto layout.
+    let saved = CanvasLayoutStore(root: fx.root).load()
+    #expect(saved.keys.sorted() == ["a.md"])
+    #expect(saved["a.md"] == DocGraphPoint(x: 5, y: 6))
+    withExtendedLifetime(fx) {}
+}
+
+@MainActor
 @Test func nodePathOpensInEditorWhenDocsPrefixed() async throws {
     let fx = try await VMGitFixture()
     try await fx.detdocInit()
