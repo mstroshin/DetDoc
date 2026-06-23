@@ -17,6 +17,11 @@ struct DocGraphView: View {
     private let worldSize: CGFloat = 6000
     private var center: CGPoint { CGPoint(x: worldSize / 2, y: worldSize / 2) }
 
+    /// Measured card sizes (world points) per node path, so edges can meet the real
+    /// rectangle border. Falls back to a default until a node has been laid out once.
+    @State private var nodeSizes: [String: CGSize] = [:]
+    private let defaultNodeSize = CGSize(width: 130, height: 38)
+
     var body: some View {
         // The world is a fixed 6000pt canvas. Pin it to the detail pane's exact size via a
         // GeometryReader-driven fixed frame and clip — otherwise the oversized content
@@ -55,7 +60,9 @@ struct DocGraphView: View {
                 for e in model.edges {
                     guard let a = model.nodes.first(where: { $0.path == e.a }),
                           let b = model.nodes.first(where: { $0.path == e.b }) else { continue }
-                    let shapes = directedEdge(from: worldPoint(a.position), to: worldPoint(b.position))
+                    let shapes = directedEdge(
+                        srcCenter: worldPoint(a.position), srcSize: nodeSizes[e.a] ?? defaultNodeSize,
+                        dstCenter: worldPoint(b.position), dstSize: nodeSizes[e.b] ?? defaultNodeSize)
                     ctx.stroke(shapes.line, with: .color(color), lineWidth: 1.5)
                     ctx.fill(shapes.head, with: .color(color))
                 }
@@ -69,25 +76,39 @@ struct DocGraphView: View {
                     onOpen: { onOpenDoc(node.path) },
                     onImageTap: { model.showImage($0) }
                 )
+                .onGeometryChange(for: CGSize.self) { $0.size } action: { nodeSizes[node.path] = $0 }
                 .position(worldPoint(node.position))
                 .gesture(nodeDrag(node))
             }
         }
     }
 
-    /// A line from the source's centre to the target's edge, plus a filled arrowhead at the
-    /// target end so the line reads as "a depends on b".
-    private func directedEdge(from a: CGPoint, to b: CGPoint) -> (line: Path, head: Path) {
-        let dx = b.x - a.x, dy = b.y - a.y
+    /// Point where the ray from a rectangle's centre toward `p` crosses the rectangle border.
+    static func borderPoint(center c: CGPoint, size: CGSize, toward p: CGPoint) -> CGPoint {
+        let dx = p.x - c.x, dy = p.y - c.y
+        if dx == 0 && dy == 0 { return c }
+        let hw = size.width / 2, hh = size.height / 2
+        let sx = dx == 0 ? CGFloat.greatestFiniteMagnitude : hw / abs(dx)
+        let sy = dy == 0 ? CGFloat.greatestFiniteMagnitude : hh / abs(dy)
+        let s = min(sx, sy)
+        return CGPoint(x: c.x + dx * s, y: c.y + dy * s)
+    }
+
+    /// Edge clipped to both node rectangles: it starts on the source's border and the
+    /// arrowhead tip lands exactly on the target's border, so it slides along the edges as
+    /// nodes move.
+    private func directedEdge(srcCenter: CGPoint, srcSize: CGSize,
+                              dstCenter: CGPoint, dstSize: CGSize) -> (line: Path, head: Path) {
+        let start = Self.borderPoint(center: srcCenter, size: srcSize, toward: dstCenter)
+        let tip = Self.borderPoint(center: dstCenter, size: dstSize, toward: srcCenter)
+        let dx = tip.x - start.x, dy = tip.y - start.y
         let len = (dx * dx + dy * dy).squareRoot()
-        var line = Path(); line.move(to: a)
-        guard len > 1 else { line.addLine(to: b); return (line, Path()) }
+        var line = Path(); line.move(to: start)
+        guard len > 1 else { line.addLine(to: tip); return (line, Path()) }
         let ux = dx / len, uy = dy / len
-        let inset: CGFloat = 48          // back the head off so it sits at the card edge, not under it
-        let tip = CGPoint(x: b.x - ux * inset, y: b.y - uy * inset)
         line.addLine(to: tip)
-        let size: CGFloat = 11, half: CGFloat = 6
-        let base = CGPoint(x: tip.x - ux * size, y: tip.y - uy * size)
+        let headLen: CGFloat = 11, half: CGFloat = 6
+        let base = CGPoint(x: tip.x - ux * headLen, y: tip.y - uy * headLen)
         let px = -uy, py = ux            // perpendicular unit vector
         var head = Path()
         head.move(to: tip)
