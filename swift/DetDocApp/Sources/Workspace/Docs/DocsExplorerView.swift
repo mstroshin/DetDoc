@@ -13,6 +13,9 @@ struct DocsExplorerView: View {
     @State private var nameInput = ""
     @State private var renameTarget: String?
     @State private var deleteTarget: String?
+    /// Last file-row tap, for manual double-click detection (instant single click, no
+    /// SwiftUI count:2 disambiguation delay).
+    @State private var lastTap: (id: String, time: Date)?
 
     var body: some View {
         List(tree.nodes, children: \.children, selection: $selection) { node in
@@ -32,13 +35,21 @@ struct DocsExplorerView: View {
             if node.isDirectory {
                 row   // folders keep the List's native selection + disclosure behaviour
             } else {
-                // Make the whole row (the label included) the hit area: single click
-                // selects, double click opens the text. A gesture on the label alone
-                // would steal clicks on the text from the List's own selection — which is
-                // why clicking the file name used to do nothing.
+                // Whole row is the hit area (a gesture on the label alone would steal
+                // clicks on the text from the List's selection). One count:1 gesture so
+                // the single click fires INSTANTLY; a second tap on the same row within
+                // 0.35 s opens the text. Avoids SwiftUI's count:2 disambiguation delay.
                 row.contentShape(Rectangle())
-                    .onTapGesture(count: 2) { selection = node.id; onActivate(node.id) }
-                    .onTapGesture(count: 1) { selection = node.id }
+                    .onTapGesture {
+                        let now = Date()
+                        if let last = lastTap, last.id == node.id, now.timeIntervalSince(last.time) < 0.35 {
+                            lastTap = nil
+                            onActivate(node.id)
+                        } else {
+                            selection = node.id
+                            lastTap = (node.id, now)
+                        }
+                    }
             }
         }
         .overlay {
