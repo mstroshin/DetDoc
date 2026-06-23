@@ -145,6 +145,18 @@ struct WorkspaceView: View {
         .onChange(of: panel.stage) { _, stage in if stage == .completed { Task { await workspace.refresh(); tree.refresh(); runs.refresh() } } }
         .sheet(isPresented: $showRuns) { RunsSheet(runs: runs).frame(minWidth: 480, minHeight: 360) }
         .sheet(isPresented: $showSettings) { SettingsSheet(settings: settings).frame(minWidth: 520, minHeight: 420) }
+        .sheet(isPresented: Binding(
+            get: { panel.stage == .inputPending },
+            set: { presented in
+                if !presented && panel.stage == .inputPending { panel.cancelInput() }
+            }
+        )) {
+            InputReviewView(
+                diff: panel.inputDiff ?? "",
+                onRun: { panel.confirmInput() },
+                onCancel: { panel.cancelInput() }
+            )
+        }
         .alert("Fix intent", isPresented: $showFixPrompt) {
             TextField("Describe the bug and expected behavior", text: $fixMessage)
             Button("Run fix") { panel.start(mode: .fix, message: fixMessage) }
