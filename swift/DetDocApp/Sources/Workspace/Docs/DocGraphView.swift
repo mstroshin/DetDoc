@@ -27,6 +27,10 @@ struct DocGraphView: View {
                 .offset(model.offset)
                 .coordinateSpace(name: "graph")
         }
+        // The 6000pt world would otherwise expand the ZStack and draw over the sidebar/
+        // toolbar; pin to the detail pane and clip so the canvas stays in the centre.
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
         .contentShape(Rectangle())
         .gesture(panGesture)
         .gesture(zoomGesture)
