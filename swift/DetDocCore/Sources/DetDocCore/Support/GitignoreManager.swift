@@ -1,7 +1,7 @@
 import Foundation
 
 public enum GitignoreManager {
-    public static let managedEntries = [".DS_Store", ".detdoc/runs/*", "!.detdoc/runs/.gitkeep", ".worktrees/"]
+    public static let managedEntries = [".DS_Store", ".detdoc/runs/*", "!.detdoc/runs/.gitkeep", ".detdoc/canvas-layout.json", ".worktrees/"]
 
     public static func ensureManagedEntries(root: URL) throws {
         let url = root.appendingPathComponent(".gitignore")
