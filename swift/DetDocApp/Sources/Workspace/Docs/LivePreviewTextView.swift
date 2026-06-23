@@ -49,6 +49,11 @@ struct LivePreviewTextView: NSViewRepresentable {
         tv.isAutomaticQuoteSubstitutionEnabled = false
         tv.isAutomaticDashSubstitutionEnabled = false
         tv.isAutomaticLinkDetectionEnabled = false
+        // No automatic link styling: the bubble carries a .link (for cmd-click follow) and the
+        // default blue underline/color would peek out from behind the translucent glass chip.
+        // Revealed @links keep their own explicit linkColor; cmd-click still works (it's driven
+        // by the .link attribute, not this styling).
+        tv.linkTextAttributes = [:]
         context.coordinator.textView = tv
         contentStorage.delegate = context.coordinator
 
@@ -88,6 +93,11 @@ struct LivePreviewTextView: NSViewRepresentable {
         let quickLook = ImageQuickLookSource()
         private var cachedCandidates: [DocCandidate] = []
         private var lastCaret = 0
+        // True while the user has stepped INTO a bubble (arrow-left at its trailing edge) to
+        // edit the link. It reveals the raw @text while the caret rests at the link's very
+        // end (absEnd) — a spot that, when NOT editing, instead reads as "after the collapsed
+        // bubble". Cleared by any click and once the caret leaves the token.
+        private var editingBubble = false
         private var pendingCanvasInsertIndex = 0
         private var canvasSheet: NSWindow?
 
@@ -156,10 +166,9 @@ struct LivePreviewTextView: NSViewRepresentable {
             for ref in refs {
                 let absStart = paraStart + ref.range.location
                 let absEnd = absStart + ref.range.length
-                // Collapsed at BOTH edges; reveals only when the caret steps strictly
-                // inside (arrow into the token), so the bubble never pops open just from
-                // a caret landing on its boundary (click-snap, vertical nav, etc.).
-                let caretInLink = caret > absStart && caret < absEnd
+                // Collapsed while the caret is away or at the LEADING edge; revealed once it
+                // is inside or at the TRAILING edge (see `reveals`).
+                let caretInLink = reveals(caret: caret, absStart: absStart, absEnd: absEnd)
 
                 if let res = resolver.resolve(ref.path) {
                     if res.exists {
@@ -168,13 +177,26 @@ struct LivePreviewTextView: NSViewRepresentable {
                         display.addAttribute(.link, value: "detdoc://\(res.docPath)", range: ref.range)
 
                         if !caretInLink {
-                            // Collapse to a Liquid Glass bubble.
+                            // Collapse to a Liquid Glass bubble. Carry the link on the bubble
+                            // glyph itself so a cmd-click follows it (via clickedOnLink), exactly
+                            // like a revealed token — a plain click instead lands the caret after it.
                             let docName = String(ref.path.split(separator: "/").last ?? Substring(ref.path))
-                            let docPath = res.docPath
-                            let bubble = DocLinkBubbleAttachment(title: docName) { [weak self] in
-                                self?.onFollowLink(docPath)
+                            let bubble = DocLinkBubbleAttachment(title: docName)
+                            let bubbleStr = NSMutableAttributedString(attachment: bubble)
+                            // Pad the display back to the backing token's length with
+                            // (near) zero-width chars, so the backing<->display mapping stays
+                            // 1:1 and the caret can render at a valid x right AFTER the bubble
+                            // (a length-shortening collapse leaves firstRect degenerate at x=0).
+                            let padCount = max(0, ref.range.length - 1)
+                            if padCount > 0 {
+                                let pad = NSMutableAttributedString(string: String(repeating: " ", count: padCount))
+                                pad.addAttribute(.font, value: NSFont.systemFont(ofSize: 0.01),
+                                                 range: NSRange(location: 0, length: padCount))
+                                bubbleStr.append(pad)
                             }
-                            modifications.append((range: ref.range, replacement: NSAttributedString(attachment: bubble)))
+                            bubbleStr.addAttribute(.link, value: "detdoc://\(res.docPath)",
+                                                   range: NSRange(location: 0, length: bubbleStr.length))
+                            modifications.append((range: ref.range, replacement: bubbleStr))
                         }
                     } else {
                         // Broken token: red dotted — no bubble, regardless of caret.
@@ -190,7 +212,7 @@ struct LivePreviewTextView: NSViewRepresentable {
             for img in imageRefs {
                 let absStart = paraStart + img.range.location
                 let absEnd = absStart + img.range.length
-                let caretInToken = caret > absStart && caret < absEnd   // strictly inside — see caretInLink note
+                let caretInToken = reveals(caret: caret, absStart: absStart, absEnd: absEnd)   // see caretInLink note
 
                 if let url = imageImporter.resolve(img.path) {
                     display.addAttribute(.foregroundColor, value: NSColor.linkColor, range: img.range)
@@ -435,11 +457,31 @@ struct LivePreviewTextView: NSViewRepresentable {
             for r in ranges {
                 let absStart = para.location + r.location
                 let absEnd = absStart + r.length
-                // Must match the collapse predicate in textContentStorage(_:textParagraphWith:)
-                // so a refresh fires exactly when the bubble flips collapsed<->revealed.
+                // Strict-inside reveal — the editing-at-end case is tracked separately via
+                // editingBubble, so this stays the plain strict predicate.
                 if caret > absStart && caret < absEnd { return NSRange(location: absStart, length: absEnd - absStart) }
             }
             return nil
+        }
+
+        /// A token shows its raw @text (instead of a bubble) when the caret is inside it or
+        /// at its trailing edge (absEnd). `textContentStorage(_:textParagraphWith:)` and
+        /// `tokenRange(atCaret:)` both gate on this, so the rendered state and the
+        /// caret/refresh logic can't drift apart.
+        private func reveals(caret: Int, absStart: Int, absEnd: Int) -> Bool {
+            // Strictly inside always; the trailing edge (absEnd) only while editing. So a
+            // click that lands the caret at absEnd keeps the bubble COLLAPSED (the caret
+            // still renders just after it thanks to the zero-width display padding), and
+            // arrow-left reveals the raw @text to edit the link from its very end.
+            (caret > absStart && caret < absEnd) || (editingBubble && caret == absEnd)
+        }
+
+        /// Whether `caret` still sits within a collapsed token's editable span — strictly
+        /// inside, or at its trailing edge (absEnd). Link-edit mode stays active while this
+        /// holds and is cleared once the caret moves out (to the token's start or past it).
+        private func caretEditingEligible(_ caret: Int) -> Bool {
+            guard let tok = collapsedTokenRange(containing: caret) else { return false }
+            return caret > tok.location
         }
 
         func refreshCaretParagraphs(old: Int, new: Int) {
@@ -467,22 +509,28 @@ struct LivePreviewTextView: NSViewRepresentable {
 
         func textViewDidChangeSelection(_ notification: Notification) {
             let new = textView?.selectedRange().location ?? 0
+            let wasEditing = editingBubble
+            // Exit link-edit mode on any click (so a click re-collapses the bubble and never
+            // re-opens it), or once the caret leaves the token's editable span.
+            if editingBubble, isMouseClick(NSApp.currentEvent) || !caretEditingEligible(new) {
+                editingBubble = false
+            }
+            // Refresh on a strict-inside flip, or when edit mode just ended (so the token
+            // revealed at its end re-collapses).
             let oldToken = tokenRange(atCaret: lastCaret)
             let newToken = tokenRange(atCaret: new)
-            if oldToken != newToken {
+            if oldToken != newToken || (wasEditing && !editingBubble) {
                 refreshCaretParagraphs(old: lastCaret, new: new)
             }
             lastCaret = new
             updateCompletion(allowOpen: false)
         }
 
-        // A collapsed token (link bubble or image) is one display glyph standing in for
-        // the whole `@token` backing text, so TextKit's hit-testing maps a click in its
-        // area to an arbitrary boundary of that range — usually the start, which then
-        // reveals the raw text instead of leaving a caret where the user clicked. Snap any
-        // click that lands inside a collapsed token to its END: the caret sits just after
-        // the bubble (ready to type behind it) and the bubble never expands from a click.
-        // To edit the link, arrow-left into the token — that reveals the raw @path.
+        // A collapsed token (link bubble or image) is one display glyph standing in for the
+        // whole `@token` backing text, so TextKit maps a click in its area to an arbitrary
+        // boundary of that range. Snap any click inside a collapsed token to its END: the
+        // caret lands at the link's trailing edge, which reveals the raw @text (a caret can't
+        // render after a collapsed trailing glyph) so the user can edit/type right there.
         func textView(_ textView: NSTextView,
                       willChangeSelectionFromCharacterRanges oldSelectedCharRanges: [NSValue],
                       toCharacterRanges newSelectedCharRanges: [NSValue]) -> [NSValue] {
@@ -490,10 +538,16 @@ struct LivePreviewTextView: NSViewRepresentable {
                   newSelectedCharRanges.count == 1,
                   let proposed = newSelectedCharRanges.first?.rangeValue,
                   proposed.length == 0,
-                  let token = collapsedTokenRange(containing: proposed.location)
+                  let target = snapTargetForClick(at: proposed.location)
             else { return newSelectedCharRanges }
 
-            return [NSValue(range: NSRange(location: token.location + token.length, length: 0))]
+            return [NSValue(range: NSRange(location: target, length: 0))]
+        }
+
+        /// The caret offset a click should snap to — just AFTER the bubble — when it lands
+        /// inside a collapsed token, or nil when it falls outside every collapsed token.
+        func snapTargetForClick(at p: Int) -> Int? {
+            collapsedTokenRange(containing: p).map { $0.location + $0.length }
         }
 
         private func isMouseClick(_ e: NSEvent?) -> Bool {
@@ -534,15 +588,16 @@ struct LivePreviewTextView: NSViewRepresentable {
 
         func textView(_ textView: NSTextView, doCommandBy selector: Selector) -> Bool {
             if !completion.isActive {
-                // A collapsed bubble is a single atomic glyph, so a plain left/right arrow
-                // skips the whole `@token` instead of entering it. When the caret sits right
-                // against a bubble and the user arrows TOWARD it, step the caret one char
-                // inside: the strictly-inside position reveals the raw @path for editing.
+                // A collapsed bubble is one atomic glyph, so a plain arrow skips the whole
+                // `@token`. Arrow-LEFT from the trailing edge ENTERS the bubble: reveal the
+                // raw @path and keep the caret at the link's very end, ready to edit. Arrow-
+                // RIGHT from the leading edge steps one char inside to reveal it too.
                 let caret = textView.selectedRange().location
                 switch selector {
                 case #selector(NSResponder.moveLeft(_:)):
-                    if let tok = collapsedToken(endingAt: caret) {
-                        textView.setSelectedRange(NSRange(location: tok.location + tok.length - 1, length: 0))
+                    if !editingBubble, collapsedToken(endingAt: caret) != nil {
+                        editingBubble = true
+                        refreshCaretParagraphs(old: caret, new: caret)
                         return true
                     }
                 case #selector(NSResponder.moveRight(_:)):
@@ -550,13 +605,6 @@ struct LivePreviewTextView: NSViewRepresentable {
                         textView.setSelectedRange(NSRange(location: tok.location + 1, length: 0))
                         return true
                     }
-                case #selector(NSResponder.moveDown(_:)):
-                    // Let the standard vertical move land first, then — if it dropped the
-                    // caret at a line that LEADS with a bubble — step it to just behind the
-                    // bubble so the caret rests after the preview, not in front of it.
-                    textView.moveDown(nil)
-                    relocateCaretBehindLeadingBubble()
-                    return true
                 default:
                     break
                 }
@@ -588,14 +636,6 @@ struct LivePreviewTextView: NSViewRepresentable {
             guard let tok = collapsedTokenRange(containing: caret),
                   tok.location == caret else { return nil }
             return tok
-        }
-
-        /// If the caret sits exactly at the START of a collapsed bubble, move it to just
-        /// AFTER the bubble. Called after a vertical move so the caret lands behind the
-        /// preview (bubble stays collapsed) rather than in front of it.
-        func relocateCaretBehindLeadingBubble() {
-            guard let tv = textView, let tok = collapsedToken(startingAt: tv.selectedRange().location) else { return }
-            tv.setSelectedRange(NSRange(location: tok.location + tok.length, length: 0))
         }
 
         func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
