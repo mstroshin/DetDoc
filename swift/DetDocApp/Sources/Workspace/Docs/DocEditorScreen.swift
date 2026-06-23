@@ -22,10 +22,12 @@ struct DocEditorScreen: View {
                                     candidatesProvider: candidatesProvider,
                                     onFollowLink: onFollowLink,
                                     showCodeLinks: showCodeLinks)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .accessibilityIdentifier("doc-editor-live-preview")
             }
         }
+        // Always fill the detail area; without this the empty-state ContentUnavailableView
+        // hugs its content and the shared header VStack gets centred vertically.
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
