@@ -19,6 +19,8 @@ struct WorkspaceView: View {
     @State private var showSearch = false
     @State private var fixMessage = ""
     @State private var showFixPrompt = false
+    @State private var graph: DocGraphViewModel
+    @State private var showCanvas = false
 
     init(root: URL) {
         self.root = root
@@ -32,6 +34,7 @@ struct WorkspaceView: View {
         _settings = State(initialValue: SettingsViewModel(root: root))
         _tree = State(initialValue: DocsTreeViewModel(root: root, config: config))
         _docSearch = State(initialValue: DocSearchViewModel(root: root, config: config))
+        _graph = State(initialValue: DocGraphViewModel(root: root, config: config))
     }
 
     private var linkResolver: DocLinkResolver {
@@ -48,13 +51,20 @@ struct WorkspaceView: View {
                 .navigationSplitViewColumnWidth(min: 220, ideal: 280, max: 360)
                 .navigationTitle("Docs")
         } detail: {
-            DocEditorScreen(editor: editor, resolver: linkResolver,
-                            imageImporter: imageImporter,
-                            candidatesProvider: {
-                                let svc = DocsService(root: root, config: self.config)
-                                return svc.candidates()
-                            }) { docPath in
-                if !tree.isDirectory(docPath) { selectedDoc = docPath }
+            if showCanvas {
+                DocGraphView(model: graph, root: root, onOpenDoc: { docPath in
+                    selectedDoc = docPath
+                    showCanvas = false
+                })
+            } else {
+                DocEditorScreen(editor: editor, resolver: linkResolver,
+                                imageImporter: imageImporter,
+                                candidatesProvider: {
+                                    let svc = DocsService(root: root, config: self.config)
+                                    return svc.candidates()
+                                }) { docPath in
+                    if !tree.isDirectory(docPath) { selectedDoc = docPath }
+                }
             }
         }
         .inspector(isPresented: $showInspector) {
@@ -65,6 +75,10 @@ struct WorkspaceView: View {
             ToolbarItemGroup {
                 Button { panel.start(mode: .run) } label: { Label("Run docs", systemImage: "play.fill") }
                 Button { showFixPrompt = true } label: { Label("Fix…", systemImage: "wrench.and.screwdriver") }
+                Button { showCanvas.toggle() } label: {
+                    Label("Canvas", systemImage: showCanvas ? "doc.text" : "point.3.connected.trianglepath.dotted")
+                }
+                .accessibilityIdentifier("toolbar.toggleCanvas")
                 Button { showRuns = true } label: { Label("Runs", systemImage: "clock.arrow.circlepath") }
                 Button { showSettings = true } label: { Label("Settings", systemImage: "gearshape") }
                 Button { showInspector.toggle() } label: { Label("Inspector", systemImage: "sidebar.trailing") }
@@ -122,6 +136,7 @@ struct WorkspaceView: View {
                 )
             }
         }
+        .onChange(of: showCanvas) { _, on in if on { graph.refresh() } }
         .onChange(of: showSearch) { _, shown in if shown { docSearch.present() } }
         .animation(.easeOut(duration: 0.12), value: showSearch)
     }
