@@ -61,3 +61,18 @@ nonisolated public enum DiffModel {
         return files
     }
 }
+
+nonisolated public extension DiffModel {
+    /// Reduce parsed files to just what's worth reviewing: the added/removed/context lines.
+    /// Strips the git file-header block (everything up to the first hunk — `diff --git`, mode,
+    /// `index`, `---`, `+++`), the `@@` hunk markers, and "no newline" markers. The path is shown
+    /// separately, so this leaves only "filename + the lines that changed".
+    static func contentOnly(_ files: [DiffFile]) -> [DiffFile] {
+        files.map { file in
+            let body = file.lines
+                .drop(while: { $0.kind != .hunk })
+                .filter { $0.kind != .hunk && $0.text != #"\ No newline at end of file"# }
+            return DiffFile(path: file.path, lines: body)
+        }
+    }
+}

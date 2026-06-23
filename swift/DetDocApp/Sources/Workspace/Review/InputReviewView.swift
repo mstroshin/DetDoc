@@ -6,7 +6,9 @@ struct InputReviewView: View {
     let onRun: () -> Void
     let onCancel: () -> Void
 
-    private var files: [DiffFile] { DiffModel.parse(diff) }
+    // Only the file path + the lines that changed — the git header block, hunk markers, and
+    // "no newline" markers are stripped (the path is shown as the section header).
+    private var files: [DiffFile] { DiffModel.contentOnly(DiffModel.parse(diff)) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {

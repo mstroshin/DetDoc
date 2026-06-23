@@ -33,6 +33,27 @@ import Testing
     #expect(DiffModel.parse(patch).map(\.path) == ["x", "y"])
 }
 
+@Test func contentOnlyKeepsOnlyChangedLines() {
+    let patch = """
+    diff --git a/docs/a.md b/docs/a.md
+    new file mode 100644
+    index 0000000..8b05326
+    --- /dev/null
+    +++ b/docs/a.md
+    @@ -1,3 +1,3 @@
+     keep
+    -old
+    +new
+    \\ No newline at end of file
+    """
+    let files = DiffModel.contentOnly(DiffModel.parse(patch))
+    #expect(files.count == 1)
+    #expect(files[0].path == "docs/a.md")
+    // header block, @@ hunk marker, and the no-newline marker are all gone
+    #expect(files[0].lines.map(\.text) == [" keep", "-old", "+new"])
+    #expect(files[0].lines.allSatisfy { [.context, .deletion, .addition].contains($0.kind) })
+}
+
 @Test func parseMultiSegmentPathWithoutPlusPlusHeader() {
     // Regression: the old replacingOccurrences(of:"b/") would mangle b/lib/sub/x → lisux.
     // Mode-only diffs have no +++ b/ header so the fallback path from diff --git is used.
