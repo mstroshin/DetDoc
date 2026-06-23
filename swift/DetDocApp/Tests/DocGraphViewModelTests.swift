@@ -46,3 +46,27 @@ import Testing
     #expect(reloaded.nodes.first { $0.path == "a.md" }?.position == CGPoint(x: 100, y: 200))
     withExtendedLifetime(fx) {}
 }
+
+@MainActor
+@Test func nodePathOpensInEditorWhenDocsPrefixed() async throws {
+    let fx = try await VMGitFixture()
+    try await fx.detdocInit()
+    try fx.write("docs/guides/setup.md", "# Setup\nbody\n")
+
+    let vm = DocGraphViewModel(root: fx.root, config: .default)
+    vm.refresh()
+    let node = try #require(vm.nodes.first { $0.path == "guides/setup.md" })
+
+    let editor = DocEditorViewModel(root: fx.root, config: .default)
+    // WorkspaceView prepends "docs/" before handing the path to the editor.
+    editor.open("docs/" + node.path)
+    #expect(editor.error == nil)
+    #expect(editor.source.contains("Setup"))
+
+    // The bare (docs/-stripped) node path must NOT resolve — guards against
+    // anyone "simplifying" the prefix away again.
+    let editor2 = DocEditorViewModel(root: fx.root, config: .default)
+    editor2.open(node.path)
+    #expect(editor2.error != nil)
+    withExtendedLifetime(fx) {}
+}

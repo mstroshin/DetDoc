@@ -53,7 +53,7 @@ struct WorkspaceView: View {
         } detail: {
             if showCanvas {
                 DocGraphView(model: graph, root: root, onOpenDoc: { docPath in
-                    selectedDoc = docPath
+                    selectedDoc = "docs/" + docPath
                     showCanvas = false
                 })
             } else {
@@ -79,6 +79,7 @@ struct WorkspaceView: View {
                     Label("Canvas", systemImage: showCanvas ? "doc.text" : "point.3.connected.trianglepath.dotted")
                 }
                 .accessibilityIdentifier("toolbar.toggleCanvas")
+                .accessibilityLabel(showCanvas ? "Show editor" : "Show canvas")
                 Button { showRuns = true } label: { Label("Runs", systemImage: "clock.arrow.circlepath") }
                 Button { showSettings = true } label: { Label("Settings", systemImage: "gearshape") }
                 Button { showInspector.toggle() } label: { Label("Inspector", systemImage: "sidebar.trailing") }
