@@ -18,24 +18,27 @@ struct DocGraphView: View {
     private var center: CGPoint { CGPoint(x: worldSize / 2, y: worldSize / 2) }
 
     var body: some View {
-        ZStack {
-            Color(nsColor: .textBackgroundColor)
+        // The world is a fixed 6000pt canvas. Pin it to the detail pane's exact size via a
+        // GeometryReader-driven fixed frame and clip — otherwise the oversized content
+        // expands the view and draws over the sidebar, toolbar, and inspector.
+        GeometryReader { geo in
+            ZStack {
+                Color(nsColor: .textBackgroundColor)
 
-            world
-                .frame(width: worldSize, height: worldSize)
-                .scaleEffect(model.scale)
-                .offset(model.offset)
-                .coordinateSpace(name: "graph")
+                world
+                    .frame(width: worldSize, height: worldSize)
+                    .scaleEffect(model.scale)
+                    .offset(model.offset)
+                    .coordinateSpace(name: "graph")
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
+            .clipped()
+            .contentShape(Rectangle())
+            .gesture(panGesture)
+            .gesture(zoomGesture)
+            .overlay(alignment: .topTrailing) { resetButton }
+            .overlay { imageOverlay }
         }
-        // The 6000pt world would otherwise expand the ZStack and draw over the sidebar/
-        // toolbar; pin to the detail pane and clip so the canvas stays in the centre.
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .clipped()
-        .contentShape(Rectangle())
-        .gesture(panGesture)
-        .gesture(zoomGesture)
-        .overlay(alignment: .topTrailing) { resetButton }
-        .overlay { imageOverlay }
         .accessibilityIdentifier("docGraph.canvas")
         .onAppear { if model.nodes.isEmpty && model.edges.isEmpty { model.refresh() } }
     }
