@@ -182,18 +182,8 @@ struct LivePreviewTextView: NSViewRepresentable {
                             // like a revealed token — a plain click instead lands the caret after it.
                             let docName = String(ref.path.split(separator: "/").last ?? Substring(ref.path))
                             let bubble = DocLinkBubbleAttachment(title: docName)
-                            let bubbleStr = NSMutableAttributedString(attachment: bubble)
-                            // Pad the display back to the backing token's length with
-                            // (near) zero-width chars, so the backing<->display mapping stays
-                            // 1:1 and the caret can render at a valid x right AFTER the bubble
-                            // (a length-shortening collapse leaves firstRect degenerate at x=0).
-                            let padCount = max(0, ref.range.length - 1)
-                            if padCount > 0 {
-                                let pad = NSMutableAttributedString(string: String(repeating: " ", count: padCount))
-                                pad.addAttribute(.font, value: NSFont.systemFont(ofSize: 0.01),
-                                                 range: NSRange(location: 0, length: padCount))
-                                bubbleStr.append(pad)
-                            }
+                            let bubbleStr = paddedCollapse(NSAttributedString(attachment: bubble),
+                                                           toBackingLength: ref.range.length)
                             bubbleStr.addAttribute(.link, value: "detdoc://\(res.docPath)",
                                                    range: NSRange(location: 0, length: bubbleStr.length))
                             modifications.append((range: ref.range, replacement: bubbleStr))
@@ -220,7 +210,11 @@ struct LivePreviewTextView: NSViewRepresentable {
                         let attachment = DocImageAttachment(url: url, editor: editor) { [weak self] in
                             self?.openQuickLook(url)
                         }
-                        modifications.append((range: img.range, replacement: NSAttributedString(attachment: attachment)))
+                        // Pad back to the backing length (same as the link bubble) so a click/caret
+                        // can land right AFTER the collapsed image instead of jumping to the line start.
+                        let imgStr = paddedCollapse(NSAttributedString(attachment: attachment),
+                                                    toBackingLength: img.range.length)
+                        modifications.append((range: img.range, replacement: imgStr))
                     }
                 } else {
                     display.addAttribute(.foregroundColor, value: NSColor.systemRed, range: img.range)
@@ -248,6 +242,23 @@ struct LivePreviewTextView: NSViewRepresentable {
                 }
             }
             return NSTextParagraph(attributedString: display)
+        }
+
+        /// Wraps a collapsed token's replacement `glyph` and pads it back to the backing token's
+        /// length with near-zero-width spaces, so the backing<->display mapping stays 1:1. Without
+        /// this the caret has no valid x to render at right after the glyph — a length-shortening
+        /// collapse leaves firstRect degenerate at x=0 and the caret jumps to the line start.
+        /// Shared by the link bubble and the image preview.
+        private func paddedCollapse(_ glyph: NSAttributedString, toBackingLength backingLength: Int) -> NSMutableAttributedString {
+            let out = NSMutableAttributedString(attributedString: glyph)
+            let padCount = max(0, backingLength - glyph.length)
+            if padCount > 0 {
+                let pad = NSMutableAttributedString(string: String(repeating: " ", count: padCount))
+                pad.addAttribute(.font, value: NSFont.systemFont(ofSize: 0.01),
+                                 range: NSRange(location: 0, length: padCount))
+                out.append(pad)
+            }
+            return out
         }
 
         // MARK: - Panel management

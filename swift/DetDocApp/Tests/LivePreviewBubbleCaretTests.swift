@@ -22,8 +22,15 @@ private struct BubbleStack {
     let tv: NSTextView
     let cs: NSTextContentStorage
 
-    init(text: String, existingDocs: Set<String>) {
+    init(text: String, existingDocs: Set<String> = [], existingImages: [String] = []) {
         let tmp = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            .appendingPathComponent("DetDocTest-\(UUID().uuidString)", isDirectory: true)
+        // Image tokens resolve by hitting the filesystem, so drop a dummy byte at each path.
+        for path in existingImages {
+            let url = tmp.appendingPathComponent("docs").appendingPathComponent(path)
+            try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? Data([0]).write(to: url)
+        }
         let editor = DocEditorViewModel(root: tmp, config: .default)
         coord = LivePreviewTextView.Coordinator(
             editor: editor,
@@ -84,6 +91,24 @@ private struct BubbleStack {
     let backingLen = ("foo @guides/setup bar" as NSString).length
     #expect(s.collapsed(caret: 0, rawToken: "@guides/setup") == true)  // collapsed
     #expect(s.displayLength(caret: 0) == backingLen)                   // …but display length preserved
+}
+
+// "foo @assets/pic.png bar" — the image token occupies backing range [4,19):
+//   f0 o1 o2 ·3 @4 a5 s6 s7 e8 t9 s10 /11 p12 i13 c14 .15 p16 n17 g18 ·19 b20 …
+@MainActor
+@Test func imageHasSameCaretContractAsLinkBubble() {
+    // An image collapses to an attachment glyph just like a link bubble, so it gets the same
+    // contract: collapsed on its edges (a click snaps the caret to just after it), revealed
+    // strictly inside, and padded back to the backing length so the caret can land after it.
+    let s = BubbleStack(text: "foo @assets/pic.png bar", existingImages: ["assets/pic.png"])
+    let raw = "@assets/pic.png"
+    let backingLen = ("foo @assets/pic.png bar" as NSString).length
+
+    #expect(s.collapsed(caret: 4, rawToken: raw) == true)    // leading edge → collapsed
+    #expect(s.collapsed(caret: 12, rawToken: raw) == false)  // strictly inside → revealed
+    #expect(s.collapsed(caret: 19, rawToken: raw) == true)   // trailing edge → stays collapsed
+    #expect(s.displayLength(caret: 0) == backingLen)         // padded: display length preserved
+    #expect(s.coord.snapTargetForClick(at: 10) == 19)        // click on the image → caret after it
 }
 
 @MainActor
