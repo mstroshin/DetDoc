@@ -56,15 +56,16 @@ struct DocGraphView: View {
     private var world: some View {
         ZStack(alignment: .topLeading) {
             Canvas { ctx, _ in
-                let color = Color(nsColor: .tertiaryLabelColor)
+                let lineColor = Color(nsColor: .tertiaryLabelColor)
+                let headColor = Color(nsColor: .systemGray)   // opaque, so the line never shows through
                 for e in model.edges {
                     guard let a = model.nodes.first(where: { $0.path == e.a }),
                           let b = model.nodes.first(where: { $0.path == e.b }) else { continue }
                     let shapes = directedEdge(
                         srcCenter: worldPoint(a.position), srcSize: nodeSizes[e.a] ?? defaultNodeSize,
                         dstCenter: worldPoint(b.position), dstSize: nodeSizes[e.b] ?? defaultNodeSize)
-                    ctx.stroke(shapes.line, with: .color(color), lineWidth: 1.5)
-                    ctx.fill(shapes.head, with: .color(color))
+                    ctx.stroke(shapes.line, with: .color(lineColor), lineWidth: 1.5)
+                    ctx.fill(shapes.head, with: .color(headColor))
                 }
             }
             .frame(width: worldSize, height: worldSize)
@@ -106,9 +107,9 @@ struct DocGraphView: View {
         var line = Path(); line.move(to: start)
         guard len > 1 else { line.addLine(to: tip); return (line, Path()) }
         let ux = dx / len, uy = dy / len
-        line.addLine(to: tip)
         let headLen: CGFloat = 11, half: CGFloat = 6
         let base = CGPoint(x: tip.x - ux * headLen, y: tip.y - uy * headLen)
+        line.addLine(to: base)           // stop at the arrowhead base; the opaque head finishes the tip
         let px = -uy, py = ux            // perpendicular unit vector
         var head = Path()
         head.move(to: tip)
