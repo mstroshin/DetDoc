@@ -57,4 +57,12 @@ final class DocGraphViewModel {
     func showImage(_ path: String) { zoomedImagePath = path }
     func closeImage() { zoomedImagePath = nil }
     func resetView() { scale = 1; offset = .zero }
+
+#if DEBUG
+    /// Preview/test seam: inject node + edge state without reading the filesystem.
+    func setPreviewState(nodes: [Node], edges: [DocGraphEdge]) {
+        self.nodes = nodes
+        self.edges = edges
+    }
+#endif
 }
