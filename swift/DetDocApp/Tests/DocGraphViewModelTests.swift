@@ -18,13 +18,14 @@ import Testing
     let vm = DocGraphViewModel(root: fx.root, config: .default)
     vm.refresh()
 
-    #expect(vm.nodes.map(\.path).sorted().contains("a.md"))           // a.md present
-    #expect(vm.nodes.map(\.path).sorted().contains("b.md"))           // b.md present
+    #expect(vm.nodes.map(\.path).contains("a.md"))                    // a.md present
+    #expect(vm.nodes.map(\.path).contains("b.md"))                    // b.md present
     #expect(!vm.nodes.map(\.path).contains("ghost.md"))               // ghost.md dropped
     let a = try #require(vm.nodes.first { $0.path == "a.md" })
     #expect(a.position == CGPoint(x: 42, y: 7))                      // saved position kept
     let b = try #require(vm.nodes.first { $0.path == "b.md" })
     #expect(b.position != CGPoint(x: 42, y: 7))                      // b got an auto position
+    #expect(b.position != .zero)                                     // ...not the origin fallback
     #expect(vm.edges.contains(DocGraphEdge("a.md", "b.md")))
     withExtendedLifetime(fx) {}
 }
