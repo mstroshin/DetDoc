@@ -123,9 +123,19 @@ struct DocGraphView: View {
     private func nodeDrag(_ node: DocGraphViewModel.Node) -> some Gesture {
         DragGesture(coordinateSpace: .named("graph"))
             .onChanged { v in
-                model.moveNode(node.path, to: CGPoint(x: v.location.x - center.x, y: v.location.y - center.y))
+                // Move by the drag delta from the grab position, not by snapping the node's
+                // centre to the cursor — otherwise grabbing a node off-centre makes it jump.
+                if draggingPath != node.path {
+                    draggingPath = node.path
+                    dragStartPos = node.position
+                }
+                model.moveNode(node.path, to: CGPoint(x: dragStartPos.x + v.translation.width,
+                                                      y: dragStartPos.y + v.translation.height))
             }
-            .onEnded { _ in model.persistPositions() }
+            .onEnded { _ in
+                draggingPath = nil
+                model.persistPositions()
+            }
     }
 
     private var panGesture: some Gesture {
@@ -145,6 +155,8 @@ struct DocGraphView: View {
 
     @State private var panStart: CGSize = .zero
     @State private var zoomStart: CGFloat = 1
+    @State private var draggingPath: String?
+    @State private var dragStartPos: CGPoint = .zero
 
     // MARK: Overlays
 
