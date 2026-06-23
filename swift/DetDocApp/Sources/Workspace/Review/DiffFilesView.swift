@@ -21,7 +21,7 @@ struct DiffFilesView: View {
     /// in a multi-file diff read as distinct blocks rather than one run-on list.
     private func fileCard(_ file: DiffFile) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(file.path)
+            Text(displayPath(file.path))
                 .font(.system(.caption, design: .monospaced)).bold()
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 8).padding(.vertical, 5)
@@ -58,6 +58,13 @@ struct DiffFilesView: View {
         case .deletion: .red.opacity(0.12)
         default: .clear
         }
+    }
+
+    /// Drop the redundant leading `docs/` from the displayed path; paths without it (code files in
+    /// the patch review, or markdown outside docs/) are shown unchanged. The accessibility id keeps
+    /// the full path for debugging.
+    private func displayPath(_ path: String) -> String {
+        path.hasPrefix("docs/") ? String(path.dropFirst("docs/".count)) : path
     }
 }
 
